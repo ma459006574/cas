@@ -61,7 +61,8 @@
                    | set its name to something other than its default name (typically the simple class name).
                    -->
                 <entry key-ref="proxyAuthenticationHandler" value-ref="proxyPrincipalResolver" />
-                <entry key-ref="primaryAuthenticationHandler" value-ref="primaryPrincipalResolver" />
+<!--                 <entry key-ref="primaryAuthenticationHandler" value-ref="primaryPrincipalResolver" /> -->
+				<entry key-ref="dbAuthHandler" value-ref="primaryPrincipalResolver"/>
             </map>
         </constructor-arg>
 
@@ -102,14 +103,39 @@
        | * org.jasig.cas.adaptors.x509.authentication.handler.support.X509CredentialsAuthenticationHandler
        | * org.jasig.cas.support.spnego.authentication.handler.support.JCIFSSpnegoAuthenticationHandler
        -->
-    <bean id="primaryAuthenticationHandler"
-          class="org.jasig.cas.authentication.AcceptUsersAuthenticationHandler">
-        <property name="users">
-            <map>
-                <entry key="casuser" value="Mellon"/>
-            </map>
-        </property>
-    </bean>
+<!--     <bean id="primaryAuthenticationHandler" -->
+<!--           class="org.jasig.cas.authentication.AcceptUsersAuthenticationHandler"> -->
+<!--         <property name="users"> -->
+<!--             <map> -->
+<!--                 <entry key="casuser" value="Mellon"/> -->
+<!--             </map> -->
+<!--         </property> -->
+<!--     </bean> -->
+<!-- 	<bean id="dataSource" -->
+<!-- 	  class="com.mchange.v2.c3p0.ComboPooledDataSource" -->
+<!-- 	 p:driverClass="com.mysql.jdbc.Driver" p:jdbcUrl="jdbc:mysql://127.0.0.1:3306/myweb?useUnicode=true&amp;characterEncoding=UTF-8&amp;zeroDateTimeBehavior=convertToNull" -->
+<!-- 	  p:user="root" -->
+<!-- 	  p:password="123" /> -->
+	  
+	  
+	<!-- 数据源配置,使用应用服务器的数据库连接池 -->
+	<bean id="dataSource" class="org.springframework.jndi.JndiObjectFactoryBean" autowire="byName">
+		<property name="jndiName">
+ 			<value>${cas.datasource.jndi.name}</value>
+		</property>
+	</bean>
+
+	<!-- 密码加密方式-->
+	<bean id="passwordEncoder"
+      class="org.jasig.cas.authentication.handler.DefaultPasswordEncoder"
+      c:encodingAlgorithm="MD5"
+      p:characterEncoding="UTF-8" />
+
+	  <bean id="dbAuthHandler"
+      class="org.jasig.cas.adaptors.jdbc.QueryDatabaseAuthenticationHandler"
+      p:dataSource-ref="dataSource"
+      p:sql="select pwd_ password from t_user where ID_=? "
+      p:passwordEncoder-ref="passwordEncoder" />
 
     <!-- Required for proxy ticket mechanism -->
     <bean id="proxyPrincipalResolver"

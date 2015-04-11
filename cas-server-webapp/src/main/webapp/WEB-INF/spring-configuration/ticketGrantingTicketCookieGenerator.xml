@@ -32,11 +32,12 @@
 
 	<bean id="ticketGrantingTicketCookieGenerator" class="org.jasig.cas.web.support.CookieRetrievingCookieGenerator"
         c:casCookieValueManager-ref="cookieValueManager"
-        p:cookieSecure="true"
+        p:cookieSecure="false"
 		p:cookieMaxAge="-1"
 		p:cookieName="TGC"
 		p:cookiePath="/cas" />
-
+<!-- p:cookieSecure="false"这边改成falSE。如果为TRUE表示只能 -->
+<!-- https的请求才 能读取到cookie中的值，http请求不能从cookie中读取到值。 -->
     <bean id="cookieCipherExecutor" class="org.jasig.cas.util.DefaultCipherExecutor"
             c:secretKeyEncryption="${tgc.encryption.key}"
             c:secretKeySigning="${tgc.signing.key}"/>

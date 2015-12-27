@@ -26,30 +26,34 @@
 #
 
 language: java
+sudo: false
 branches:
   only:
   - master
 jdk:
 - oraclejdk7
-- openjdk7
-- oraclejdk8
+# - oraclejdk8
+cache:
+  directories:
+    - '$HOME/.gradle/caches'
 env:
   global:
   - secure: "JlFTItSTHxmevCoX1fXWkXtQOqP8ERT5ndeYMc378acqZIWEpmoSQelP8unRjtU6sU/4dxdUWpEFLrbcNQsFuPsgzMLGSwuEcjbuSBGMgdAHXSl6+FfBWrCcde2WIfk+eYMm7mrhcySWMvtWss1kDOu+s8+HtRvnRCAsfz+77hs="
   - secure: "iWPPLKSS3zBs2adqLPkMiHfCj2hSLyD5BoV3oodhR7Ne83Kpn1khRcEWFoHF3Ed11eSU+glNdPSzUpc8TzwTZGx5B3RU2Qp36hZFyjuzNWJARmoVPYMiEg3FFBQrUR75w+Tbtn6zPkiAk6nl0K5ewmY0/xixVdnTLXL5HjpE2rc="
   - secure: "f3mDIZ8m6NYJXI8KvWD/sZRSeCCyIyfgPRy3Q6o9u9WyHZuYaJf95Ia0eJQ3gxUDS1TKL31Vk08dhFKrfIcKgifFPa2uQ2uyJkvGxlarMTQ+tpqsZYp4zAJgKc9r4xdZasvF2k4xqr+pl9AFjlpXB4jDD59XPXt3DcRABOYA9sM="
+before_script:
+ - echo $JAVA_OPTS
+ - export JAVA_OPTS=-Xmx512m
 before_install:
 - chmod -R 777 ./travis/init-travis-build.sh
 - ./travis/init-travis-build.sh
+- chmod -R 777 ./gradlew
 install:
-- mvn install -P nocheck -Dmaven.javadoc.skip=true -B -V -q
+- ./gradlew clean
 script:
-- mvn clean package -Dlog4j.configurationFile=../travis/log4j2.xml
+- ./gradlew build -x javadoc -DskipAspectJ=true
 after_success:
 - chmod -R 777 ./travis/push-javadoc-to-gh-pages.sh
 - ./travis/push-javadoc-to-gh-pages.sh
 - chmod -R 777 ./travis/deploy-to-sonatype.sh
 - ./travis/deploy-to-sonatype.sh
-- mvn clean test cobertura:cobertura coveralls:cobertura -Dlog4j.configuration=file:../travis/log4j2.xml -Dcheckstyle.skip=true -Dlicense.skip=true -Dnotice.skip=true -Dversions.skip=true
-#- chmod -R 777 ./travis/test-commit-message.sh
-#- ./travis/test-commit-message.sh

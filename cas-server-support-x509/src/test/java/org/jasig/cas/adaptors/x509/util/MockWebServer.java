@@ -1,21 +1,3 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.adaptors.x509.util;
 
 import java.io.IOException;
@@ -43,7 +25,7 @@ public class MockWebServer {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     /** Request handler. */
-    private Worker worker;
+    private final Worker worker;
 
     /** Controls the worker thread. */
     private Thread workerThread;
@@ -80,7 +62,7 @@ public class MockWebServer {
         try {
             this.workerThread.join();
         } catch (final InterruptedException e) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
         }
     }
 
@@ -96,7 +78,8 @@ public class MockWebServer {
     /**
      * Worker class handles request processing.
      */
-    final class Worker implements Runnable {
+    private static final class Worker implements Runnable {
+
         /** Server always returns HTTP 200 response. */
         private static final String STATUS_LINE = "HTTP/1.1 200 Success\r\n";
 
@@ -105,6 +88,8 @@ public class MockWebServer {
 
         /** Response buffer size. */
         private static final int BUFFER_SIZE = 2048;
+
+        private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
         /** Run flag. */
         private boolean running;
@@ -127,7 +112,7 @@ public class MockWebServer {
          * @param resource Single resource to serve.
          * @param contentType MIME content type of resource to serve.
          */
-        public Worker(final ServerSocket sock, final Resource resource, final String contentType) {
+        Worker(final ServerSocket sock, final Resource resource, final String contentType) {
             this.serverSocket = sock;
             this.resource = resource;
             this.contentType = contentType;
@@ -139,11 +124,12 @@ public class MockWebServer {
             while (this.running) {
                 try {
                     writeResponse(this.serverSocket.accept());
+                    Thread.sleep(500);
                 } catch (final SocketException se) {
                     logger.debug("Stopping on socket close.");
                     this.running = false;
-                } catch (final IOException ioe) {
-                    ioe.printStackTrace();
+                } catch (final Exception e) {
+                    logger.error(e.getMessage(), e);
                 }
             }
         }
@@ -157,6 +143,7 @@ public class MockWebServer {
         }
 
         private void writeResponse(final Socket socket) throws IOException {
+            logger.debug("Socket response for resource {}", resource.getFilename());
             final OutputStream out = socket.getOutputStream();
             out.write(STATUS_LINE.getBytes());
             out.write(header("Content-Length", this.resource.contentLength()));
@@ -164,16 +151,20 @@ public class MockWebServer {
             out.write(SEPARATOR.getBytes());
 
             final byte[] buffer = new byte[BUFFER_SIZE];
-            final InputStream in = this.resource.getInputStream();
-            int count = 0;
-            while ((count = in.read(buffer)) > -1) {
-                out.write(buffer, 0, count);
+            try (final InputStream in = this.resource.getInputStream()) {
+                int count = 0;
+                while ((count = in.read(buffer)) > -1) {
+                    out.write(buffer, 0, count);
+                }
             }
-            in.close();
+            logger.debug("Wrote response for resource {} for {}",
+                    resource.getFilename(),
+                    resource.contentLength());
+
             socket.shutdownOutput();
         }
 
-        private byte[] header(final String name, final Object value) {
+        private static byte[] header(final String name, final Object value) {
             return String.format("%s: %s\r\n", name, value).getBytes();
         }
     }

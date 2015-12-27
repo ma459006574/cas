@@ -1,38 +1,33 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.ticket.registry.support.kryo;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.regex.Pattern;
 
-import javax.validation.constraints.NotNull;
-
+import de.javakaffee.kryoserializers.EnumMapSerializer;
+import de.javakaffee.kryoserializers.EnumSetSerializer;
+import de.javakaffee.kryoserializers.KryoReflectionFactorySupport;
+import de.javakaffee.kryoserializers.RegexSerializer;
+import de.javakaffee.kryoserializers.URISerializer;
+import de.javakaffee.kryoserializers.UUIDSerializer;
+import de.javakaffee.kryoserializers.guava.ImmutableListSerializer;
+import de.javakaffee.kryoserializers.guava.ImmutableMapSerializer;
+import de.javakaffee.kryoserializers.guava.ImmutableMultimapSerializer;
+import de.javakaffee.kryoserializers.guava.ImmutableSetSerializer;
 import net.spy.memcached.CachedData;
 import net.spy.memcached.transcoders.Transcoder;
 
 import org.jasig.cas.authentication.BasicCredentialMetaData;
-import org.jasig.cas.authentication.HandlerResult;
+import org.jasig.cas.authentication.DefaultHandlerResult;
 import org.jasig.cas.authentication.ImmutableAuthentication;
 import org.jasig.cas.authentication.principal.SimpleWebApplicationServiceImpl;
 import org.jasig.cas.services.RegexRegisteredService;
@@ -50,8 +45,6 @@ import org.jasig.cas.ticket.support.ThrottledUseAndTimeoutExpirationPolicy;
 import org.jasig.cas.ticket.support.TicketGrantingTicketExpirationPolicy;
 import org.jasig.cas.ticket.support.TimeoutExpirationPolicy;
 import org.joda.time.DateTime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
@@ -61,6 +54,7 @@ import com.esotericsoftware.kryo.serializers.DefaultSerializers;
 
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import de.javakaffee.kryoserializers.jodatime.JodaDateTimeSerializer;
+import org.slf4j.impl.CasDelegatingLogger;
 
 /**
  * {@link net.spy.memcached.MemcachedClient} transcoder implementation based on Kryo fast serialization framework
@@ -73,10 +67,7 @@ import de.javakaffee.kryoserializers.jodatime.JodaDateTimeSerializer;
 public class KryoTranscoder implements Transcoder<Object> {
 
     /** Kryo serializer. */
-    private final Kryo kryo = new Kryo();
-
-    /** Logging instance. */
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final Kryo kryo = new KryoReflectionFactorySupport();
 
     /** Map of class to serializer that handles it. */
     private Map<Class<?>, Serializer> serializerMap;
@@ -85,17 +76,6 @@ public class KryoTranscoder implements Transcoder<Object> {
      * Creates a Kryo-based transcoder.
      */
     public KryoTranscoder() {
-    }
-
-    /**
-     * @deprecated
-     * Creates a Kryo-based transcoder.
-     *
-     * @param initialBufferSize Initial size for buffer holding encoded object data.
-     */
-    @Deprecated
-    public KryoTranscoder(final int initialBufferSize) {
-        logger.warn("It's no longer necessary to define the initialBufferSize. Use the empty constructor.");
     }
 
     /**
@@ -119,7 +99,7 @@ public class KryoTranscoder implements Transcoder<Object> {
         kryo.register(Date.class, new DefaultSerializers.DateSerializer());
         kryo.register(HardTimeoutExpirationPolicy.class);
         kryo.register(HashMap.class);
-        kryo.register(HandlerResult.class);
+        kryo.register(DefaultHandlerResult.class);
         kryo.register(ImmutableAuthentication.class);
         kryo.register(MultiTimeUseOrTimeoutExpirationPolicy.class);
         kryo.register(NeverExpiresExpirationPolicy.class);
@@ -131,6 +111,11 @@ public class KryoTranscoder implements Transcoder<Object> {
         kryo.register(TicketGrantingTicketImpl.class);
         kryo.register(TimeoutExpirationPolicy.class);
         kryo.register(URL.class, new URLSerializer());
+        kryo.register(URI.class, new URISerializer());
+        kryo.register(Pattern.class, new RegexSerializer());
+        kryo.register(UUID.class, new UUIDSerializer());
+        kryo.register(EnumMap.class, new EnumMapSerializer());
+        kryo.register(EnumSet.class, new EnumSetSerializer());
 
         // we add these ones for tests only
         kryo.register(RegisteredServiceImpl.class, new RegisteredServiceSerializer());
@@ -138,8 +123,14 @@ public class KryoTranscoder implements Transcoder<Object> {
 
         // new serializers to manage Joda dates and immutable collections
         kryo.register(DateTime.class, new JodaDateTimeSerializer());
+        kryo.register(CasDelegatingLogger.class, new DefaultSerializers.VoidSerializer());
+
         // from the kryo-serializers library (https://github.com/magro/kryo-serializers)
         UnmodifiableCollectionsSerializer.registerSerializers(kryo);
+        ImmutableListSerializer.registerSerializers(kryo);
+        ImmutableSetSerializer.registerSerializers(kryo);
+        ImmutableMapSerializer.registerSerializers(kryo);
+        ImmutableMultimapSerializer.registerSerializers(kryo);
 
         // Register other types
         if (serializerMap != null) {
@@ -162,12 +153,13 @@ public class KryoTranscoder implements Transcoder<Object> {
      * @param d Data to decode.
      * @return False.
      */
+    @Override
     public boolean asyncDecode(final CachedData d) {
         return false;
     }
 
     @Override
-    public CachedData encode(@NotNull final Object obj) {
+    public CachedData encode(final Object obj) {
         final ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
         try (final Output output = new Output(byteStream)) {
             kryo.writeClassAndObject(output, obj);
@@ -189,8 +181,9 @@ public class KryoTranscoder implements Transcoder<Object> {
     /**
      * Maximum size of encoded data supported by this transcoder.
      *
-     * @return  <code>net.spy.memcached.CachedData#MAX_SIZE</code>.
+     * @return  {@code net.spy.memcached.CachedData#MAX_SIZE}.
      */
+    @Override
     public int getMaxSize() {
         return CachedData.MAX_SIZE;
     }

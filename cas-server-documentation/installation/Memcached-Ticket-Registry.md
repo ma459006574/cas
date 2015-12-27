@@ -6,12 +6,13 @@ title: CAS - Memcached Ticket Registry
 # Memcached Ticket Registry
 Memcached integration is enabled by including the following dependency in the Maven WAR overlay:
 
-    <dependency>
-        <groupId>org.jasig.cas</groupId>
-        <artifactId>cas-server-integration-memcached</artifactId>
-        <version>${cas.version}</version>
-    </dependency>
-
+{% highlight xml %}
+<dependency>
+    <groupId>org.jasig.cas</groupId>
+    <artifactId>cas-server-integration-memcached</artifactId>
+    <version>${cas.version}</version>
+</dependency>
+{% endhighlight %}
 `MemCacheTicketRegistry` stores tickets in one or more [memcached](http://memcached.org/) instances. The
 [spymemcached](https://code.google.com/p/spymemcached/) library used by this component presents memcached as a
 key/value store that accepts `String` keys and Java `Object` values.
@@ -26,6 +27,11 @@ where _h(K)_ is the hash of key _K_, _N1 ... Nm_ is the set of cache nodes, and 
 The function is deterministic in that it consistently produces the same result for a given key and set of cache nodes.
 Note that a change in the set of available cache nodes may produce a different target node on which to store the key.
 
+Enable the registry via:
+
+{% highlight xml %}
+<alias name="memcachedTicketRegistry" alias="ticketRegistry" />
+{% endhighlight %}
 
 ## Configuration Considerations
 There are three core configuration concerns with memcached:
@@ -41,7 +47,7 @@ corresponding value. The choice of hashing algorithm has implications for failov
 for HA deployments. The `FNV1_64_HASH` algorithm is recommended since it offers a nice balance of speed and low
 collision rate; see the
 [javadocs](https://github.com/couchbase/spymemcached/blob/2.8.1/src/main/java/net/spy/memcached/DefaultHashAlgorithm.java)
-for alternatives. 
+for alternatives.
 
 
 ### Node Locator
@@ -71,51 +77,14 @@ framework. This component is recommended over the default Java serialization mec
 compact data, which benefits both storage requirements and throughput.
 
 
-## Component Configuration
-The following configuration is a template for `ticketRegistry.xml` Spring configuration:
-{% highlight xml %}
-<beans xmlns="http://www.springframework.org/schema/beans"
-       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xmlns:c="http://www.springframework.org/schema/c"
-       xmlns:p="http://www.springframework.org/schema/p"
-       xmlns:util="http://www.springframework.org/schema/util"
-       xsi:schemaLocation="
-       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
-       http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd">
-
-    <bean id="ticketRegistry"
-          class="org.jasig.cas.ticket.registry.MemCacheTicketRegistry"
-          c:client-ref="memcachedClient"
-          c:ticketGrantingTicketTimeOut="${tgt.maxTimeToLiveInSeconds}"
-          c:serviceTicketTimeOut="${st.timeToKillInSeconds}" />
-
-    <bean id="memcachedClient" class="net.spy.memcached.spring.MemcachedClientFactoryBean"
-          p:servers="${memcached.servers}"
-          p:protocol="${memcached.protocol}"
-          p:locatorType="${memcached.locatorType}"
-          p:failureMode="${memcached.failureMode}"
-          p:transcoder-ref="kryoTranscoder">
-        <property name="hashAlg">
-            <util:constant static-field="net.spy.memcached.DefaultHashAlgorithm.${memcached.hashAlgorithm}" />
-        </property>
-    </bean>
-
-    <bean id="kryoTranscoder"
-          class="org.jasig.cas.ticket.registry.support.kryo.KryoTranscoder"
-          init-method="initialize"
-          c:initialBufferSize="8192" />
-</beans>
+## Configuration
+{% highlight properties %}
+# memcached.servers=cas-1.example.org:11211,cas-2.example.org:11211,cas-3.example.org:11211
+# memcached.hashAlgorithm=FNV1_64_HASH
+# memcached.protocol=BINARY
+# memcached.locatorType=ARRAY_MOD
+# memcached.failureMode=Redistribute
 {% endhighlight %}
-
-`MemCacheTicketRegistry` properties reference:
-
-    # It is common to run memcached on every CAS node
-    memcached.servers=cas-1.example.org:11211,cas-2.example.org:11211,cas-3.example.org:11211
-    memcached.hashAlgorithm=FNV1_64_HASH
-    memcached.protocol=BINARY
-    memcached.locatorType=ARRAY_MOD
-    memcached.failureMode=Redistribute
-
 
 ## High Availability Considerations
 Memcached does not provide for replication by design, but the client is tolerant to node failures with

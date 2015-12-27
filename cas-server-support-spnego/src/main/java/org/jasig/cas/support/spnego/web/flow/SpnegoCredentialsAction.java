@@ -1,21 +1,3 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.spnego.web.flow;
 
 import org.jasig.cas.authentication.Credential;
@@ -24,6 +6,8 @@ import org.jasig.cas.support.spnego.util.SpnegoConstants;
 import org.jasig.cas.util.CompressionUtils;
 import org.jasig.cas.web.flow.AbstractNonInteractiveCredentialsAction;
 import org.jasig.cas.web.support.WebUtils;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.webflow.execution.RequestContext;
 
@@ -33,36 +17,39 @@ import java.nio.charset.Charset;
 
 /**
  * Second action of a SPNEGO flow : decode the gssapi-data and build a new
- * {@link org.jasig.cas.support.spnego.authentication.principal.SpnegoCredential}.<br>
+ * {@link org.jasig.cas.support.spnego.authentication.principal.SpnegoCredential}.
+ * <p>
  * Once AbstractNonInteractiveCredentialsAction has executed the authentication
  * procedure, this action check whether a principal is present in Credential and
- * add corresponding response headers.
+ * add corresponding response headers.</p>
  *
  * @author Arnaud Lesueur
  * @author Marc-Antoine Garrigue
  * @see <a href="http://ietfreport.isoc.org/idref/rfc4559/#page-2">RFC 4559</a>
  * @since 3.1
  */
+@Component
 public final class SpnegoCredentialsAction extends AbstractNonInteractiveCredentialsAction {
 
 
+    @Value("${cas.spnego.ntlm.allowed:true}")
     private boolean ntlm;
 
     private String messageBeginPrefix = constructMessagePrefix();
 
     /**
-     * Behavior in case of SPNEGO authentication failure :<br>
+     * Behavior in case of SPNEGO authentication failure :
      * <ul><li>True : if SPNEGO is the last authentication method with no fallback.</li>
      * <li>False : if an interactive view (eg: login page) should be send to user as SPNEGO failure fallback</li>
      * </ul>
      */
+    @Value("${cas.spnego.send.401.authn.failure:false}")
     private boolean send401OnAuthenticationFailure = true;
 
     @Override
     protected Credential constructCredentialsFromRequest(
             final RequestContext context) {
-        final HttpServletRequest request = WebUtils
-                .getHttpServletRequest(context);
+        final HttpServletRequest request = WebUtils.getHttpServletRequest(context);
 
         final String authorizationHeader = request
                 .getHeader(SpnegoConstants.HEADER_AUTHORIZATION);
@@ -75,6 +62,10 @@ public final class SpnegoCredentialsAction extends AbstractNonInteractiveCredent
                     authorizationHeader.length() - this.messageBeginPrefix.length());
 
             final byte[] token = CompressionUtils.decodeBase64ToByteArray(authorizationHeader.substring(this.messageBeginPrefix.length()));
+            if (token == null) {
+                logger.warn("Could not compress authorization header in base64");
+                return null;
+            }
             logger.debug("Obtained token: {}", new String(token, Charset.defaultCharset()));
             return new SpnegoCredential(token);
         }
@@ -89,7 +80,7 @@ public final class SpnegoCredentialsAction extends AbstractNonInteractiveCredent
      */
     protected String constructMessagePrefix() {
         return (this.ntlm ? SpnegoConstants.NTLM : SpnegoConstants.NEGOTIATE)
-                + " ";
+                + ' ';
     }
 
     @Override
@@ -124,7 +115,7 @@ public final class SpnegoCredentialsAction extends AbstractNonInteractiveCredent
             logger.debug("Obtained output token: {}", new String(nextToken, Charset.defaultCharset()));
             response.setHeader(SpnegoConstants.HEADER_AUTHENTICATE, (this.ntlm
                     ? SpnegoConstants.NTLM : SpnegoConstants.NEGOTIATE)
-                    + " " + CompressionUtils.encodeBase64(nextToken));
+                    + ' ' + CompressionUtils.encodeBase64(nextToken));
         } else {
             logger.debug("Unable to obtain the output token required.");
         }

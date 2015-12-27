@@ -1,21 +1,3 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.oauth.web;
 
 import org.apache.commons.lang3.StringUtils;
@@ -23,6 +5,10 @@ import org.jasig.cas.services.ServicesManager;
 import org.jasig.cas.ticket.registry.TicketRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.mvc.AbstractController;
 
@@ -37,25 +23,32 @@ import javax.validation.constraints.NotNull;
  * @author Jerome Leleu
  * @since 3.5.0
  */
+@Component("baseOAuthWrapperController")
 public abstract class BaseOAuthWrapperController extends AbstractController {
 
     /** The logger. */
-    protected final Logger logger = LoggerFactory.getLogger(BaseOAuthWrapperController.class);
+    protected final Logger logger = LoggerFactory.getLogger(getClass());
 
     /** The login url. */
     @NotNull
+    @Value("${server.prefix:http://localhost:8080/cas}/login")
     protected String loginUrl;
 
     /** The services manager. */
     @NotNull
+    @Autowired
+    @Qualifier("servicesManager")
     protected ServicesManager servicesManager;
 
     /** The ticket registry. */
     @NotNull
+    @Autowired
+    @Qualifier("ticketRegistry")
     protected TicketRegistry ticketRegistry;
 
     /** The timeout. */
     @NotNull
+    @Value("${tgt.timeToKillInSeconds:7200}")
     protected long timeout;
 
     @Override
@@ -107,6 +100,22 @@ public abstract class BaseOAuthWrapperController extends AbstractController {
 
     public void setLoginUrl(final String loginUrl) {
         this.loginUrl = loginUrl;
+    }
+
+    public String getLoginUrl() {
+        return loginUrl;
+    }
+
+    public ServicesManager getServicesManager() {
+        return servicesManager;
+    }
+
+    public TicketRegistry getTicketRegistry() {
+        return ticketRegistry;
+    }
+
+    public long getTimeout() {
+        return timeout;
     }
 
     public void setTimeout(final long timeout) {

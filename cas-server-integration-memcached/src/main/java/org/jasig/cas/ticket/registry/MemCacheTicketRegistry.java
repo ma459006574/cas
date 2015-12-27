@@ -1,39 +1,23 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.ticket.registry;
+
+import java.util.Map;
+import net.spy.memcached.AddrUtil;
+import net.spy.memcached.MemcachedClient;
+import net.spy.memcached.MemcachedClientIF;
+import org.jasig.cas.ticket.ServiceTicket;
+import org.jasig.cas.ticket.Ticket;
+import org.jasig.cas.ticket.TicketGrantingTicket;
+import org.jasig.cas.authentication.principal.Service;
+import org.jasig.cas.ticket.registry.encrypt.AbstractCrypticTicketRegistry;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.concurrent.TimeUnit;
-
-import javax.validation.constraints.Min;
-import javax.validation.constraints.NotNull;
-
-import net.spy.memcached.AddrUtil;
-import net.spy.memcached.MemcachedClient;
-import net.spy.memcached.MemcachedClientIF;
-
-import org.jasig.cas.ticket.ServiceTicket;
-import org.jasig.cas.ticket.Ticket;
-import org.jasig.cas.ticket.TicketGrantingTicket;
-import org.springframework.beans.factory.DisposableBean;
+import java.util.List;
 
 /**
  * Key-value ticket registry implementation that stores tickets in memcached keyed on the ticket ID.
@@ -42,24 +26,29 @@ import org.springframework.beans.factory.DisposableBean;
  * @author Marvin S. Addison
  * @since 3.3
  */
-public final class MemCacheTicketRegistry extends AbstractDistributedTicketRegistry implements DisposableBean {
+@Component("memcachedTicketRegistry")
+public final class MemCacheTicketRegistry extends AbstractCrypticTicketRegistry implements DisposableBean {
 
-    /** Memcached client. */
-    @NotNull
-    private final MemcachedClientIF client;
+    /**
+     * Memcached client.
+     */
+    private MemcachedClientIF client;
 
     /**
      * TGT cache entry timeout in seconds.
      */
-    @Min(0)
-    private final int tgtTimeout;
+    private int tgtTimeout;
 
     /**
      * ST cache entry timeout in seconds.
      */
-    @Min(0)
-    private final int stTimeout;
+    private int stTimeout;
 
+    /**
+     * Instantiates a new Mem cache ticket registry.
+     */
+    public MemCacheTicketRegistry() {
+    }
 
     /**
      * Creates a new instance that stores tickets in the given memcached hosts.
@@ -68,52 +57,54 @@ public final class MemCacheTicketRegistry extends AbstractDistributedTicketRegis
      * @param ticketGrantingTicketTimeOut TGT timeout in seconds.
      * @param serviceTicketTimeOut        ST timeout in seconds.
      */
-    public MemCacheTicketRegistry(final String[] hostnames, final int ticketGrantingTicketTimeOut,
-final int serviceTicketTimeOut) {
+    @Autowired
+    public MemCacheTicketRegistry(@Value("${memcached.servers:}")
+                                  final String[] hostnames,
+                                  @Value("${tgt.maxTimeToLiveInSeconds:28800}")
+                                  final int ticketGrantingTicketTimeOut,
+                                  @Value("${st.timeToKillInSeconds:10}")
+                                  final int serviceTicketTimeOut) {
+
         try {
-            this.client = new MemcachedClient(AddrUtil.getAddresses(Arrays.asList(hostnames)));
+            final List<String> hostNamesArray = Arrays.asList(hostnames);
+            if (hostNamesArray.isEmpty()) {
+                logger.debug("No memcached hosts are define. Client shall not be configured");
+            } else {
+                logger.info("Setting up Memcached Ticket Registry...");
+                this.tgtTimeout = ticketGrantingTicketTimeOut;
+                this.stTimeout = serviceTicketTimeOut;
+
+                this.client = new MemcachedClient(AddrUtil.getAddresses(hostNamesArray));
+            }
         } catch (final IOException e) {
             throw new IllegalArgumentException("Invalid memcached host specification.", e);
         }
-        this.tgtTimeout = ticketGrantingTicketTimeOut;
-        this.stTimeout = serviceTicketTimeOut;
-    }
 
-    /**
-     * This alternative constructor takes time in milliseconds.
-     * It has the timeout parameters in order to create a unique method signature.
-     *
-     * @param ticketGrantingTicketTimeOut TGT timeout in milliseconds.
-     * @param serviceTicketTimeOut ST timeout in milliseconds.
-     * @param hostnames  Array of memcached hosts where each element is of the form host:port.
-     * @see MemCacheTicketRegistry#MemCacheTicketRegistry(String[], int, int)
-     * @deprecated This has been deprecated
-     */
-    @Deprecated
-    public MemCacheTicketRegistry(final long ticketGrantingTicketTimeOut, final long serviceTicketTimeOut,
-            final String[] hostnames) {
-        this(hostnames,
-                Long.valueOf(TimeUnit.MILLISECONDS.toSeconds(ticketGrantingTicketTimeOut)).intValue(),
-                Long.valueOf(TimeUnit.MILLISECONDS.toSeconds(serviceTicketTimeOut)).intValue());
     }
 
     /**
      * Creates a new instance using the given memcached client instance, which is presumably configured via
-     * <code>net.spy.memcached.spring.MemcachedClientFactoryBean</code>.
+     * {@code net.spy.memcached.spring.MemcachedClientFactoryBean}.
      *
      * @param client                      Memcached client.
      * @param ticketGrantingTicketTimeOut TGT timeout in seconds.
      * @param serviceTicketTimeOut        ST timeout in seconds.
      */
     public MemCacheTicketRegistry(final MemcachedClientIF client, final int ticketGrantingTicketTimeOut,
-            final int serviceTicketTimeOut) {
+                                  final int serviceTicketTimeOut) {
         this.tgtTimeout = ticketGrantingTicketTimeOut;
         this.stTimeout = serviceTicketTimeOut;
         this.client = client;
     }
 
     @Override
-    protected void updateTicket(final Ticket ticket) {
+    protected void updateTicket(final Ticket ticketToUpdate) {
+        if (this.client == null) {
+            logger.debug("No memcached client is configured.");
+            return;
+        }
+
+        final Ticket ticket = encodeTicket(ticketToUpdate);
         logger.debug("Updating ticket {}", ticket);
         try {
             if (!this.client.replace(ticket.getId(), getTimeout(ticket), ticket).get()) {
@@ -121,14 +112,20 @@ final int serviceTicketTimeOut) {
             }
         } catch (final InterruptedException e) {
             logger.warn("Interrupted while waiting for response to async replace operation for ticket {}. "
-                        + "Cannot determine whether update was successful.", ticket);
+                + "Cannot determine whether update was successful.", ticket);
         } catch (final Exception e) {
             logger.error("Failed updating {}", ticket, e);
         }
     }
 
     @Override
-    public void addTicket(final Ticket ticket) {
+    public void addTicket(final Ticket ticketToAdd) {
+        if (this.client == null) {
+            logger.debug("No memcached client is configured.");
+            return;
+        }
+
+        final Ticket ticket = encodeTicket(ticketToAdd);
         logger.debug("Adding ticket {}", ticket);
         try {
             if (!this.client.add(ticket.getId(), getTimeout(ticket), ticket).get()) {
@@ -136,27 +133,76 @@ final int serviceTicketTimeOut) {
             }
         } catch (final InterruptedException e) {
             logger.warn("Interrupted while waiting for response to async add operation for ticket {}."
-                    + "Cannot determine whether add was successful.", ticket);
+                + "Cannot determine whether add was successful.", ticket);
         } catch (final Exception e) {
             logger.error("Failed adding {}", ticket, e);
         }
     }
+
     @Override
-    public boolean deleteTicket(final String ticketId) {
+    public boolean deleteTicket(final String ticketIdToDel) {
+        if (this.client == null) {
+            logger.debug("No memcached client is configured.");
+            return false;
+        }
+
+        final String ticketId = encodeTicketId(ticketIdToDel);
+        if (ticketId == null) {
+            return false;
+        }
+
+        final Ticket ticket = getTicket(ticketId);
+        if (ticket == null) {
+            return false;
+        }
+
+        if (ticket instanceof TicketGrantingTicket) {
+            logger.debug("Removing ticket children [{}] from the registry.", ticket);
+            deleteChildren((TicketGrantingTicket) ticket);
+        }
+
         logger.debug("Deleting ticket {}", ticketId);
         try {
             return this.client.delete(ticketId).get();
         } catch (final Exception e) {
-            logger.error("Failed deleting {}", ticketId, e);
+            logger.error("Ticket not found or is already removed. Failed deleting {}", ticketId, e);
         }
         return false;
     }
+
+    /**
+     * Delete the TGT service tickets.
+     *
+     * @param ticket the ticket
+     */
+    private void deleteChildren(final TicketGrantingTicket ticket) {
+        // delete service tickets
+        final Map<String, Service> services = ticket.getServices();
+        if (services != null && !services.isEmpty()) {
+            for (final Map.Entry<String, Service> entry : services.entrySet()) {
+                try {
+                    this.client.delete(entry.getKey());
+                    logger.trace("Scheduled deletion of service ticket [{}]", entry.getKey());
+                } catch (final Exception e) {
+                    logger.error("Failed deleting {}", entry.getKey(), e);
+                }
+            }
+        }
+    }
+
     @Override
-    public Ticket getTicket(final String ticketId) {
+    public Ticket getTicket(final String ticketIdToGet) {
+        if (this.client == null) {
+            logger.debug("No memcached client is configured.");
+            return null;
+        }
+
+        final String ticketId = encodeTicketId(ticketIdToGet);
         try {
             final Ticket t = (Ticket) this.client.get(ticketId);
             if (t != null) {
-                return getProxiedTicketInstance(t);
+                final Ticket result = decodeTicket(t);
+                return getProxiedTicketInstance(result);
             }
         } catch (final Exception e) {
             logger.error("Failed fetching {} ", ticketId, e);
@@ -172,7 +218,7 @@ final int serviceTicketTimeOut) {
      */
     @Override
     public Collection<Ticket> getTickets() {
-        throw new UnsupportedOperationException("GetTickets not supported.");
+        throw new UnsupportedOperationException("getTickets not supported.");
     }
 
     /**
@@ -180,16 +226,14 @@ final int serviceTicketTimeOut) {
      *
      * @throws Exception the exception
      */
+    @Override
     public void destroy() throws Exception {
+        if (this.client == null) {
+            return;
+        }
         this.client.shutdown();
     }
 
-    /**
-     * @param sync set to true, if updates to registry are to be synchronized
-     * @deprecated As of version 3.5, this operation has no effect since async writes can cause registry consistency issues.
-     */
-    @Deprecated
-    public void setSynchronizeUpdatesToRegistry(final boolean sync) {}
 
     @Override
     protected boolean needsCallback() {

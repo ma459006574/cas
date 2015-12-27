@@ -1,30 +1,14 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.adaptors.x509.authentication.handler.support;
 
-import java.io.InputStream;
 import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
+
+import org.jasig.cas.adaptors.x509.util.CertUtils;
 import org.junit.Assert;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
-import edu.vt.middleware.crypt.util.CryptReader;
 
 /**
  * Base class for {@link RevocationChecker} unit tests.
@@ -34,6 +18,8 @@ import edu.vt.middleware.crypt.util.CryptReader;
  *
  */
 public abstract class AbstractCRLRevocationCheckerTests {
+
+    protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     /** Certificate to be tested. */
     private final X509Certificate[] certificates;
@@ -54,8 +40,8 @@ public abstract class AbstractCRLRevocationCheckerTests {
         this.expected = expected;
         this.certificates = new X509Certificate[certFiles.length];
         int i = 0;
-        for (String file : certFiles) {
-            this.certificates[i++] = readCertificate(file);
+        for (final String file : certFiles) {
+            this.certificates[i++] = CertUtils.readCertificate(new ClassPathResource(file));
         }
     }
 
@@ -65,7 +51,7 @@ public abstract class AbstractCRLRevocationCheckerTests {
     @Test
     public void checkCertificate() {
         try {
-            for (X509Certificate cert : this.certificates) {
+            for (final X509Certificate cert : this.certificates) {
                 getChecker().check(cert);
             }
             if (this.expected != null) {
@@ -85,12 +71,4 @@ public abstract class AbstractCRLRevocationCheckerTests {
     }
 
     protected abstract RevocationChecker getChecker();
-
-    private X509Certificate readCertificate(final String file) {
-        try (InputStream in = new ClassPathResource(file).getInputStream()) {
-            return (X509Certificate) CryptReader.readCertificate(in);
-        } catch (final Exception e) {
-            throw new RuntimeException("Error reading certificate " + file, e);
-        }
-    }
 }

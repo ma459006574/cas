@@ -1,35 +1,15 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.saml.web.view;
 
 import org.jasig.cas.CasProtocolConstants;
-import org.jasig.cas.TestUtils;
 import org.jasig.cas.authentication.Authentication;
 import org.jasig.cas.authentication.RememberMeCredential;
 import org.jasig.cas.authentication.principal.DefaultPrincipalFactory;
 import org.jasig.cas.authentication.principal.Principal;
+import org.jasig.cas.authentication.support.DefaultCasAttributeEncoder;
 import org.jasig.cas.services.DefaultServicesManagerImpl;
 import org.jasig.cas.services.InMemoryServiceRegistryDaoImpl;
 import org.jasig.cas.services.RegisteredService;
-import org.jasig.cas.services.RegisteredServiceImpl;
-import org.jasig.cas.services.ReturnAllAttributeReleasePolicy;
-import org.jasig.cas.services.ServicesManager;
+import org.jasig.cas.support.saml.AbstractOpenSamlTests;
 import org.jasig.cas.support.saml.authentication.SamlAuthenticationMetaDataPopulator;
 import org.jasig.cas.validation.Assertion;
 import org.jasig.cas.validation.ImmutableAssertion;
@@ -55,7 +35,7 @@ import static org.junit.Assert.*;
  * @since 3.1
  *
  */
-public class Saml10SuccessResponseViewTests {
+public class Saml10SuccessResponseViewTests extends AbstractOpenSamlTests {
 
     private Saml10SuccessResponseView response;
 
@@ -63,17 +43,12 @@ public class Saml10SuccessResponseViewTests {
     public void setUp() throws Exception {
 
         final List<RegisteredService> list = new ArrayList<>();
-
-        final RegisteredServiceImpl regSvc = new RegisteredServiceImpl();
-        regSvc.setServiceId(TestUtils.getService().getId());
-        regSvc.setName("Test Service");
-        regSvc.setAttributeReleasePolicy(new ReturnAllAttributeReleasePolicy());
-
-        list.add(regSvc);
+        list.add(org.jasig.cas.services.TestUtils.getRegisteredService("https://.+"));
         final InMemoryServiceRegistryDaoImpl dao = new InMemoryServiceRegistryDaoImpl();
         dao.setRegisteredServices(list);
-        final ServicesManager servicesManager = new DefaultServicesManagerImpl(dao);
         this.response = new Saml10SuccessResponseView();
+        this.response.setServicesManager(new DefaultServicesManagerImpl(dao));
+        this.response.setCasAttributeEncoder(new DefaultCasAttributeEncoder(this.response.getServicesManager()));
         this.response.setIssuer("testIssuer");
         this.response.setIssueLength(1000);
     }
@@ -94,9 +69,11 @@ public class Saml10SuccessResponseViewTests {
                 SamlAuthenticationMetaDataPopulator.AUTHN_METHOD_SSL_TLS_CLIENT);
         authAttributes.put("testSamlAttribute", "value");
 
-        final Authentication primary = TestUtils.getAuthentication(principal, authAttributes);
+        final Authentication primary =
+                org.jasig.cas.authentication.TestUtils.getAuthentication(principal, authAttributes);
         final Assertion assertion = new ImmutableAssertion(
-                primary, Collections.singletonList(primary), TestUtils.getService(), true);
+                primary, Collections.singletonList(primary),
+                org.jasig.cas.authentication.TestUtils.getService(), true);
         model.put("assertion", assertion);
 
         final MockHttpServletResponse servletResponse = new MockHttpServletResponse();
@@ -128,10 +105,11 @@ public class Saml10SuccessResponseViewTests {
                 SamlAuthenticationMetaDataPopulator.AUTHN_METHOD_SSL_TLS_CLIENT);
         authAttributes.put("testSamlAttribute", "value");
 
-        final Authentication primary = TestUtils.getAuthentication(principal, authAttributes);
+        final Authentication primary = org.jasig.cas.authentication.TestUtils.getAuthentication(principal, authAttributes);
 
         final Assertion assertion = new ImmutableAssertion(
-                primary, Collections.singletonList(primary), TestUtils.getService(), true);
+                primary, Collections.singletonList(primary),
+                org.jasig.cas.authentication.TestUtils.getService(), true);
         model.put("assertion", assertion);
 
         final MockHttpServletResponse servletResponse = new MockHttpServletResponse();
@@ -157,10 +135,12 @@ public class Saml10SuccessResponseViewTests {
         authnAttributes.put("authnAttribute2", "authnAttrbuteV2");
         authnAttributes.put(RememberMeCredential.AUTHENTICATION_ATTRIBUTE_REMEMBER_ME, Boolean.TRUE);
 
-        final Authentication primary = TestUtils.getAuthentication(principal, authnAttributes);
+        final Authentication primary =
+                org.jasig.cas.authentication.TestUtils.getAuthentication(principal, authnAttributes);
 
         final Assertion assertion = new ImmutableAssertion(
-                primary, Collections.singletonList(primary), TestUtils.getService(), true);
+                primary, Collections.singletonList(primary),
+                org.jasig.cas.authentication.TestUtils.getService(), true);
         model.put("assertion", assertion);
 
         final MockHttpServletResponse servletResponse = new MockHttpServletResponse();

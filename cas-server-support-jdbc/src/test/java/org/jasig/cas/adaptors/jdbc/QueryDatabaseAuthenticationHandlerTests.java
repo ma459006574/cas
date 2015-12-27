@@ -1,33 +1,11 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
 package org.jasig.cas.adaptors.jdbc;
 
-import org.jasig.cas.TestUtils;
 import org.jasig.cas.authentication.PreventedException;
+import org.jasig.cas.authentication.TestUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
@@ -47,17 +25,21 @@ import static org.junit.Assert.*;
  * @author Misagh Moayyed mmoayyed@unicon.net
  * @since 4.0.0
  */
-@RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration("classpath:/jpaTestApplicationContext.xml")
+
 public class QueryDatabaseAuthenticationHandlerTests {
 
     private static final String SQL = "SELECT password FROM casusers where username=?";
 
-    @Autowired
+
     private DataSource dataSource;
 
     @Before
     public void setup() throws Exception {
+
+        final ClassPathXmlApplicationContext ctx = new
+            ClassPathXmlApplicationContext("classpath:/jpaTestApplicationContext.xml");
+
+        this.dataSource = ctx.getBean("dataSource", DataSource.class);
         final Connection c = this.dataSource.getConnection();
         final Statement s = c.createStatement();
         c.setAutoCommit(true);
@@ -83,14 +65,14 @@ public class QueryDatabaseAuthenticationHandlerTests {
         c.close();
     }
 
-    private String getSqlInsertStatementToCreateUserAccount(final int i) {
+    private static String getSqlInsertStatementToCreateUserAccount(final int i) {
         return String.format("insert into casusers (username, password) values('%s', '%s');", "user" + i, "psw" + i);
     }
 
     @Entity(name="casusers")
     public static class UsersTable {
         @Id
-        @GeneratedValue(strategy = GenerationType.AUTO)
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
         private Long id;
 
         private String username;

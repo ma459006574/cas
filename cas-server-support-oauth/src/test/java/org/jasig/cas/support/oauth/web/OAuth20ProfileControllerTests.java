@@ -1,42 +1,30 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.oauth.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.jasig.cas.authentication.Authentication;
+import org.jasig.cas.authentication.TestUtils;
 import org.jasig.cas.authentication.principal.Principal;
 import org.jasig.cas.support.oauth.OAuthConstants;
 import org.jasig.cas.ticket.TicketGrantingTicket;
-import org.jasig.cas.ticket.registry.TicketRegistry;
+import org.jasig.cas.ticket.TicketGrantingTicketImpl;
+import org.jasig.cas.ticket.support.NeverExpiresExpirationPolicy;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.web.servlet.mvc.Controller;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.junit.Assert.*;
 
 /**
  * This class tests the {@link OAuth20ProfileController} class.
@@ -44,6 +32,9 @@ import static org.mockito.Mockito.when;
  * @author Jerome Leleu
  * @since 3.5.2
  */
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration("classpath:/oauth-context.xml")
+@DirtiesContext()
 public final class OAuth20ProfileControllerTests {
 
     private static final String CONTEXT = "/oauth2.0/";
@@ -60,13 +51,20 @@ public final class OAuth20ProfileControllerTests {
 
     private static final String CONTENT_TYPE = "application/json";
 
+    @Autowired
+    private Controller oauth20WrapperController;
+
+
+    @Autowired
+    @Qualifier("defaultAccessTokenGenerator")
+    private AccessTokenGenerator accessTokenGenerator;
+
     @Test
     public void verifyNoAccessToken() throws Exception {
         final MockHttpServletRequest mockRequest = new MockHttpServletRequest("GET", CONTEXT
                 + OAuthConstants.PROFILE_URL);
         final MockHttpServletResponse mockResponse = new MockHttpServletResponse();
-        final OAuth20WrapperController oauth20WrapperController = new OAuth20WrapperController();
-        oauth20WrapperController.afterPropertiesSet();
+
         oauth20WrapperController.handleRequest(mockRequest, mockResponse);
         assertEquals(200, mockResponse.getStatus());
         assertEquals(CONTENT_TYPE, mockResponse.getContentType());
@@ -77,61 +75,43 @@ public final class OAuth20ProfileControllerTests {
     public void verifyNoTicketGrantingTicketImpl() throws Exception {
         final MockHttpServletRequest mockRequest = new MockHttpServletRequest("GET", CONTEXT
                 + OAuthConstants.PROFILE_URL);
-        mockRequest.setParameter(OAuthConstants.ACCESS_TOKEN, TGT_ID);
+        mockRequest.setParameter(OAuthConstants.ACCESS_TOKEN, "DOES NOT EXIST TGT");
         final MockHttpServletResponse mockResponse = new MockHttpServletResponse();
-        final OAuth20WrapperController oauth20WrapperController = new OAuth20WrapperController();
-        final TicketRegistry ticketRegistry = mock(TicketRegistry.class);
-        when(ticketRegistry.getTicket(TGT_ID)).thenReturn(null);
-        oauth20WrapperController.setTicketRegistry(ticketRegistry);
-        oauth20WrapperController.afterPropertiesSet();
         oauth20WrapperController.handleRequest(mockRequest, mockResponse);
         assertEquals(200, mockResponse.getStatus());
         assertEquals(CONTENT_TYPE, mockResponse.getContentType());
-        assertEquals("{\"error\":\"" + OAuthConstants.EXPIRED_ACCESS_TOKEN + "\"}", mockResponse.getContentAsString());
+        assertTrue(mockResponse.getContentAsString().contains(OAuthConstants.INVALID_REQUEST));
     }
 
     @Test
     public void verifyExpiredTicketGrantingTicketImpl() throws Exception {
         final MockHttpServletRequest mockRequest = new MockHttpServletRequest("GET", CONTEXT
                 + OAuthConstants.PROFILE_URL);
-        mockRequest.setParameter(OAuthConstants.ACCESS_TOKEN, TGT_ID);
+        mockRequest.setParameter(OAuthConstants.ACCESS_TOKEN, "BAD TGT ID");
         final MockHttpServletResponse mockResponse = new MockHttpServletResponse();
-        final OAuth20WrapperController oauth20WrapperController = new OAuth20WrapperController();
-        final TicketRegistry ticketRegistry = mock(TicketRegistry.class);
-        final TicketGrantingTicket ticketGrantingTicket = mock(TicketGrantingTicket.class);
-        when(ticketGrantingTicket.isExpired()).thenReturn(true);
-        when(ticketRegistry.getTicket(TGT_ID)).thenReturn(ticketGrantingTicket);
-        oauth20WrapperController.setTicketRegistry(ticketRegistry);
-        oauth20WrapperController.afterPropertiesSet();
         oauth20WrapperController.handleRequest(mockRequest, mockResponse);
         assertEquals(200, mockResponse.getStatus());
         assertEquals(CONTENT_TYPE, mockResponse.getContentType());
-        assertEquals("{\"error\":\"" + OAuthConstants.EXPIRED_ACCESS_TOKEN + "\"}", mockResponse.getContentAsString());
+        assertTrue(mockResponse.getContentAsString().contains(OAuthConstants.INVALID_REQUEST));
     }
     
     @Test
     public void verifyOK() throws Exception {
-        final MockHttpServletRequest mockRequest = new MockHttpServletRequest("GET", CONTEXT
-                + OAuthConstants.PROFILE_URL);
-        mockRequest.setParameter(OAuthConstants.ACCESS_TOKEN, TGT_ID);
-        final MockHttpServletResponse mockResponse = new MockHttpServletResponse();
-        final OAuth20WrapperController oauth20WrapperController = new OAuth20WrapperController();
-        final TicketRegistry ticketRegistry = mock(TicketRegistry.class);
-        final TicketGrantingTicket ticketGrantingTicket = mock(TicketGrantingTicket.class);
-        when(ticketGrantingTicket.isExpired()).thenReturn(false);
-        when(ticketRegistry.getTicket(TGT_ID)).thenReturn(ticketGrantingTicket);
-        final Authentication authentication = mock(Authentication.class);
-        final Principal principal = mock(Principal.class);
-        when(principal.getId()).thenReturn(ID);
         final Map<String, Object> map = new HashMap<>();
         map.put(NAME, VALUE);
         final List<String> list = Arrays.asList(VALUE, VALUE);
         map.put(NAME2, list);
-        when(principal.getAttributes()).thenReturn(map);
-        when(authentication.getPrincipal()).thenReturn(principal);
-        when(ticketGrantingTicket.getAuthentication()).thenReturn(authentication);
-        oauth20WrapperController.setTicketRegistry(ticketRegistry);
-        oauth20WrapperController.afterPropertiesSet();
+
+        final Principal p = org.jasig.cas.authentication.TestUtils.getPrincipal(ID, map);
+        final TicketGrantingTicket impl = new TicketGrantingTicketImpl(TGT_ID,
+                org.jasig.cas.authentication.TestUtils.getAuthentication(p), new NeverExpiresExpirationPolicy());
+
+        ((OAuth20WrapperController) oauth20WrapperController).getTicketRegistry().addTicket(impl);
+
+        final MockHttpServletRequest mockRequest = new MockHttpServletRequest("GET", CONTEXT
+                + OAuthConstants.PROFILE_URL);
+        mockRequest.setParameter(OAuthConstants.ACCESS_TOKEN, accessTokenGenerator.generate(TestUtils.getService(), impl));
+        final MockHttpServletResponse mockResponse = new MockHttpServletResponse();
         oauth20WrapperController.handleRequest(mockRequest, mockResponse);
         assertEquals(200, mockResponse.getStatus());
         assertEquals(CONTENT_TYPE, mockResponse.getContentType());
@@ -155,25 +135,11 @@ public final class OAuth20ProfileControllerTests {
     public void verifyOKWithAuthorizationHeader() throws Exception {
         final MockHttpServletRequest mockRequest = new MockHttpServletRequest("GET", CONTEXT
                 + OAuthConstants.PROFILE_URL);
-        mockRequest.addHeader("Authorization", "bearer " + TGT_ID);
+        final TicketGrantingTicket impl = new TicketGrantingTicketImpl(TGT_ID,
+                org.jasig.cas.authentication.TestUtils.getAuthentication(), new NeverExpiresExpirationPolicy());
+        mockRequest.addHeader("Authorization", OAuthConstants.BEARER_TOKEN + ' '
+                + accessTokenGenerator.generate(TestUtils.getService(), impl));
         final MockHttpServletResponse mockResponse = new MockHttpServletResponse();
-        final OAuth20WrapperController oauth20WrapperController = new OAuth20WrapperController();
-        final TicketRegistry ticketRegistry = mock(TicketRegistry.class);
-        final TicketGrantingTicket ticketGrantingTicket = mock(TicketGrantingTicket.class);
-        when(ticketGrantingTicket.isExpired()).thenReturn(false);
-        when(ticketRegistry.getTicket(TGT_ID)).thenReturn(ticketGrantingTicket);
-        final Authentication authentication = mock(Authentication.class);
-        final Principal principal = mock(Principal.class);
-        when(principal.getId()).thenReturn(ID);
-        final Map<String, Object> map = new HashMap<>();
-        map.put(NAME, VALUE);
-        final List<String> list = Arrays.asList(VALUE, VALUE);
-        map.put(NAME2, list);
-        when(principal.getAttributes()).thenReturn(map);
-        when(authentication.getPrincipal()).thenReturn(principal);
-        when(ticketGrantingTicket.getAuthentication()).thenReturn(authentication);
-        oauth20WrapperController.setTicketRegistry(ticketRegistry);
-        oauth20WrapperController.afterPropertiesSet();
         oauth20WrapperController.handleRequest(mockRequest, mockResponse);
         assertEquals(200, mockResponse.getStatus());
         assertEquals(CONTENT_TYPE, mockResponse.getContentType());

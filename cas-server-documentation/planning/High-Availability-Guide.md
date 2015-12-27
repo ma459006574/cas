@@ -128,21 +128,23 @@ desirable periods for node failover. A [reverse proxy](http://httpd.apache.org/d
 [software load balancer](http://www.linuxvirtualserver.org/software/ipvs.html) are recommended alternatives to hardware.
 
 
-### Cache-Based Ticket Registry
-The following cache-based ticket storage components provide the best tradeoff among ease of use, scalability, and
+### HA Ticket Registry
+The following ticket storage components provide the best tradeoff among ease of use, scalability, and
 fault tolerance and are suitable for both active/passive and active/active setups:
 
-* [EhCacheTicketRegistry](../installation/Ehcache-Ticket-Registry.html)
-* [JBossTicketRegistry](../installation/JBoss-Cache-Ticket-Registry.html)
-* [MemCacheTicketRegistry](../installation/Memcached-Ticket-Registry.html)
+* [Hazelcast](../installation/Hazelcast-Ticket-Registry.html)
+* [EhCache](../installation/Ehcache-Ticket-Registry.html)
+* [MemCached](../installation/Memcached-Ticket-Registry.html)
+* [Ignite](../installation/Ignite-Ticket-Registry.html)
+* [Couchbase](../installation/Couchbase-Ticket-Registry.html)
 
-The particular choice of caching technology should be driven by infrastructure and expertise as much as performance
-and availability considerations. It's hardly valuable to have a high-performance cache for which you lack the
+The particular choice of storage technology should be driven by infrastructure and expertise as much as performance
+and availability considerations. It's hardly valuable to have a high-performance storage for which you lack the
 expertise to troubleshoot when problems invariably arise.
 
-The technology considerations of the various cache components merit some discussion since there are notable
-differences that impact availability and performance characteristics. Cache systems like Ehcache and JBoss Cache
-(and its offspring, Infinispan) offer a distributed cache that presents a single, consistent view of entries regardless
+The technology considerations of the various storage components merit some discussion since there are notable
+differences that impact availability and performance characteristics. Cache systems like Ehcache and Hazelcast
+offer a distributed cache that presents a single, consistent view of entries regardless
 of the node contacted. Distributed caches rely on replication to provide for consistency. Cache systems like memcached
 store the ticket on exactly 1 node and use a deterministic algorithm to locate the node containing the ticket:
 
@@ -152,6 +154,11 @@ where _h(T)_ is the hash of the ticket ID, _N1 ... Nm_ is the set of cache nodes
 
 These sorts of cache systems do not require replication and generally provide for simplicity at the expense of some
 durability.
+
+##### Secure Cache Replication
+A number of cache-based ticket registries support secure replication of ticket data across the wire, 
+so that tickets are encrypted and signed on replication attempts to prevent sniffing and eavesdrops. 
+[See this guide](../installation/Ticket-Registry-Replication-Encryption.html) for more info. 
 
 
 ### Distributing Service Definitions
@@ -164,7 +171,7 @@ leverage connection pooling where possible. It makes the best use of computation
 
 
 ###Monitoring
-CAS adopters typically implement monitoring of the availability of the CAS service using the tools already in use in operational practice for monitoring other enterprise web applications. CAS introduces a new modest monitoring page with authentication by default by the remote_address of the requestor. 
+CAS adopters typically implement monitoring of the availability of the CAS service using the tools already in use in operational practice for monitoring other enterprise web applications. CAS introduces a new modest monitoring page with authentication by default by the remote_address of the requestor.
 
 
 ###Channel Confidentiality

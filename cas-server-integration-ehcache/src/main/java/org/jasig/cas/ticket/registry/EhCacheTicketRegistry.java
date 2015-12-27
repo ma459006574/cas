@@ -1,21 +1,3 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.ticket.registry;
 
 import net.sf.ehcache.Cache;
@@ -26,12 +8,18 @@ import org.apache.commons.lang3.StringUtils;
 import org.jasig.cas.ticket.ServiceTicket;
 import org.jasig.cas.ticket.Ticket;
 import org.jasig.cas.ticket.TicketGrantingTicket;
+import org.jasig.cas.authentication.principal.Service;
+import org.jasig.cas.ticket.registry.encrypt.AbstractCrypticTicketRegistry;
 import org.springframework.beans.BeanInstantiationException;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.style.ToStringCreator;
+import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Map;
 
 /**
  * <p>
@@ -50,10 +38,15 @@ import java.util.HashSet;
  * @author Andrew Tillinghast
  * @since 3.5
  */
-public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegistry implements InitializingBean {
+@Component("ehcacheTicketRegistry")
+public final class EhCacheTicketRegistry extends AbstractCrypticTicketRegistry implements InitializingBean {
 
+    @Autowired
+    @Qualifier("serviceTicketsCache")
     private Cache serviceTicketsCache;
 
+    @Autowired
+    @Qualifier("ticketGrantingTicketsCache")
     private Cache ticketGrantingTicketsCache;
 
     /**
@@ -65,7 +58,7 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
      * Instantiates a new EhCache ticket registry.
      */
     public EhCacheTicketRegistry() {
-        
+        super();
     }
 
     /**
@@ -94,7 +87,8 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
     }
 
     @Override
-    public void addTicket(final Ticket ticket) {
+    public void addTicket(final Ticket ticketToAdd) {
+        final Ticket ticket = encodeTicket(ticketToAdd);
         final Element element = new Element(ticket.getId(), ticket);
         if (ticket instanceof ServiceTicket) {
             logger.debug("Adding service ticket {} to the cache {}", ticket.getId(), this.serviceTicketsCache.getName());
@@ -109,15 +103,44 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
     }
 
     @Override
-    public boolean deleteTicket(final String ticketId) {
+    public boolean deleteTicket(final String ticketIdToDelete) {
+        final String ticketId = encodeTicketId(ticketIdToDelete);
         if (StringUtils.isBlank(ticketId)) {
             return false;
         }
-        return this.serviceTicketsCache.remove(ticketId) || this.ticketGrantingTicketsCache.remove(ticketId);
+
+        final Ticket ticket = getTicket(ticketId);
+        if (ticket == null) {
+            return false;
+        }
+
+        if (ticket instanceof TicketGrantingTicket) {
+            logger.debug("Removing ticket [{}] and its children from the registry.", ticket);
+            return deleteTicketAndChildren((TicketGrantingTicket) ticket);
+        }
+
+        logger.debug("Removing ticket [{}] from the registry.", ticket);
+        return this.serviceTicketsCache.remove(ticketId);
+    }
+
+    /**
+     * Delete the TGT and all of its service tickets.
+     *
+     * @param ticket the ticket
+     * @return boolean indicating whether ticket was deleted or not
+     */
+    private boolean deleteTicketAndChildren(final TicketGrantingTicket ticket) {
+        final Map<String, Service> services = ticket.getServices();
+        if (services != null && !services.isEmpty()) {
+            this.serviceTicketsCache.removeAll(services.keySet());
+        }
+
+        return this.ticketGrantingTicketsCache.remove(ticket.getId());
     }
 
     @Override
-    public Ticket getTicket(final String ticketId) {
+    public Ticket getTicket(final String ticketIdToGet) {
+        final String ticketId = encodeTicketId(ticketIdToGet);
         if (ticketId == null) {
             return null;
         }
@@ -126,7 +149,14 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
         if (element == null) {
             element = this.ticketGrantingTicketsCache.get(ticketId);
         }
-        return element == null ? null : getProxiedTicketInstance((Ticket) element.getObjectValue());
+        if (element == null) {
+            logger.debug("No ticket by id [{}] is found in the registry", ticketId);
+            return null;
+        }
+
+        final Ticket proxiedTicket = decodeTicket((Ticket) element.getObjectValue());
+        final Ticket ticket = getProxiedTicketInstance(proxiedTicket);
+        return ticket;
     }
 
     @Override
@@ -139,14 +169,16 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
         final Collection<Ticket> allTickets = new HashSet<>(serviceTickets.size() + tgtTicketsTickets.size());
 
         for (final Element ticket : serviceTickets) {
-            allTickets.add((Ticket) ticket.getObjectValue());
+            final Ticket proxiedTicket = getProxiedTicketInstance((Ticket) ticket.getObjectValue());
+            allTickets.add(proxiedTicket);
         }
 
         for (final Element ticket : tgtTicketsTickets) {
-            allTickets.add((Ticket) ticket.getObjectValue());
+            final Ticket proxiedTicket = getProxiedTicketInstance((Ticket) ticket.getObjectValue());
+            allTickets.add(proxiedTicket);
         }
 
-        return allTickets;
+        return decodeTickets(allTickets);
     }
 
     public void setServiceTicketsCache(final Cache serviceTicketsCache) {
@@ -175,7 +207,7 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
 
     /**
      * Flag to indicate whether this registry instance should participate in reporting its state with
-     * default value set to <code>true</code>.
+     * default value set to {@code true}.
      * Based on the <a href="http://ehcache.org/apidocs/net/sf/ehcache/Ehcache.html#getKeysWithExpiryCheck()">EhCache documentation</a>,
      * determining the number of service tickets and the total session count from the cache can be considered
      * an expensive operation with the time taken as O(n), where n is the number of elements in the cache.
@@ -187,7 +219,6 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
      * @param supportRegistryState true, if the registry is to support registry state
      * @see #sessionCount()
      * @see #serviceTicketCount()
-     * @see org.jasig.cas.monitor.SessionMonitor
      */
     public void setSupportRegistryState(final boolean supportRegistryState) {
         this.supportRegistryState = supportRegistryState;
@@ -195,6 +226,8 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
 
     @Override
     public void afterPropertiesSet() throws Exception {
+        logger.info("Setting up Ehcache Ticket Registry...");
+
         if (this.serviceTicketsCache == null || this.ticketGrantingTicketsCache == null) {
             throw new BeanInstantiationException(this.getClass(),
                     "Both serviceTicketsCache and ticketGrantingTicketsCache are required properties.");
@@ -221,7 +254,6 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
     }
 
     /**
-     * {@inheritDoc}
      * @see Cache#getKeysWithExpiryCheck()
      */
     @Override
@@ -231,7 +263,6 @@ public final class EhCacheTicketRegistry extends AbstractDistributedTicketRegist
     }
 
     /**
-     * {@inheritDoc}
      * @see Cache#getKeysWithExpiryCheck()
      */
     @Override

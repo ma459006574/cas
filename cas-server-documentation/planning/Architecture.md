@@ -30,10 +30,10 @@ have been developed.
 
 Platforms:
 
-* Apache httpd Server ([mod_auth_cas module](https://wiki.jasig.org/display/CASC/mod_auth_cas))
-* Java ([Java CAS Client](https://wiki.jasig.org/display/CASC/CAS+Client+for+Java+3.1))
-* .NET ([.NET CAS Client](https://wiki.jasig.org/display/CASC/.Net+Cas+Client))
-* PHP ([phpCAS](https://wiki.jasig.org/display/CASC/phpCAS))
+* Apache httpd Server ([mod_auth_cas module](https://github.com/Jasig/mod_auth_cas))
+* Java ([Java CAS Client](https://github.com/Jasig/java-cas-client))
+* .NET ([.NET CAS Client](https://github.com/Jasig/dotnet-cas-client))
+* PHP ([phpCAS](https://github.com/Jasig/phpCAS))
 * Perl (PerlCAS)
 * Python (pycas)
 * Ruby (rubycas-client)
@@ -73,4 +73,16 @@ It is helpful to describe the CAS server in terms of three layered subsystems:
 Almost all deployment considerations and component configuration involve those three subsystems. The Web tier is the endpoint for communication with all external systems including CAS clients. The Web tier delegates to the ticketing subsystem to generate tickets for CAS client access. The SSO session begins with the issuance of a ticket-granting ticket on successful authentication, thus the ticketing subsystem frequently delegates to the authentication subsystem.
 
 The authentication system is typically only processing requests at the start of the SSO session, though there are other cases when it can be invoked (e.g. forced authentication).
+
+### Spring Framework
+CAS uses the many aspects of the Spring Framework; most notably,
+[Spring MVC](http://docs.spring.io/spring/docs/current/spring-framework-reference/html/mvc.html) and
+[Spring Webflow](http://www.springsource.org/spring-web-flow). Spring provides a complete and extensible framework for
+the core CAS codebase as well as for deployers; it's straightforward to customize or extend CAS behavior by hooking
+CAS and Spring API extension points. General knowledge of Spring is beneficial to understanding the interplay among
+some framework compoents, but it's not strictly required. The XML-based configuration used to configure CAS and Spring
+components, however, is a core concern for installation, customization, and extension. Competence with XML generally
+and the
+[Spring IOC Container](http://docs.spring.io/spring/docs/current/spring-framework-reference/html/beans.html)
+in particular are prerequisites to CAS installation.
 

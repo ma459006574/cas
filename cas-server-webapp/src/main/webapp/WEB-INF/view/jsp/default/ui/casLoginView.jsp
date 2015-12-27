@@ -1,23 +1,3 @@
-<%--
-
-    Licensed to Apereo under one or more contributor license
-    agreements. See the NOTICE file distributed with this work
-    for additional information regarding copyright ownership.
-    Apereo licenses this file to you under the Apache License,
-    Version 2.0 (the "License"); you may not use this file
-    except in compliance with the License.  You may obtain a
-    copy of the License at the following location:
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
-
---%>
 <jsp:directive.include file="includes/top.jsp" />
 
 <c:if test="${not pageContext.request.secure}">
@@ -27,19 +7,37 @@
     </div>
 </c:if>
 
+<div id="cookiesDisabled" class="errors" style="display:none;">
+    <h2><spring:message code="screen.cookies.disabled.title" /></h2>
+    <p><spring:message code="screen.cookies.disabled.message" /></p>
+</div>
+
+
 <c:if test="${not empty registeredService}">
     <c:set var="registeredServiceLogo" value="images/webapp.png"/>
-    <c:if test="${not empty registeredService.logo}">
-        <c:set var="registeredServiceLogo" value="${registeredService.logo}"/>
-    </c:if>
+    <c:set var="registeredServiceName" value="${registeredService.name}"/>
+    <c:set var="registeredServiceDescription" value="${registeredService.description}"/>
+
+    <c:choose>
+        <c:when test="${not empty mduiContext}">
+            <c:if test="${not empty mduiContext.logoUrl}">
+                <c:set var="registeredServiceLogo" value="${mduiContext.logoUrl}"/>
+            </c:if>
+            <c:set var="registeredServiceName" value="${mduiContext.displayName}"/>
+            <c:set var="registeredServiceDescription" value="${mduiContext.description}"/>
+        </c:when>
+        <c:when test="${not empty registeredService.logo}">
+            <c:set var="registeredServiceLogo" value="${registeredService.logo}"/>
+        </c:when>
+    </c:choose>
 
     <div id="serviceui" class="serviceinfo">
         <table>
             <tr>
                 <td><img src="${registeredServiceLogo}"></td>
                 <td id="servicedesc">
-                    <h1>${fn:escapeXml(registeredService.name)}</h1>
-                    <p>${fn:escapeXml(registeredService.description)}</p>
+                    <h1>${fn:escapeXml(registeredServiceName)}</h1>
+                    <p>${fn:escapeXml(registeredServiceDescription)}</p>
                 </td>
             </tr>
         </table>
@@ -58,8 +56,8 @@
             <label for="username"><spring:message code="screen.welcome.label.netid" /></label>
             <c:choose>
                 <c:when test="${not empty sessionScope.openIdLocalId}">
-                    <strong>${sessionScope.openIdLocalId}</strong>
-                    <input type="hidden" id="username" name="username" value="${sessionScope.openIdLocalId}" />
+                    <strong><c:out value="${sessionScope.openIdLocalId}" /></strong>
+                    <input type="hidden" id="username" name="username" value="<c:out value="${sessionScope.openIdLocalId}" />" />
                 </c:when>
                 <c:otherwise>
                     <spring:message code="screen.welcome.label.netid.accesskey" var="userNameAccessKey" />
@@ -81,18 +79,28 @@
             <span id="capslock-on" style="display:none;"><p><img src="images/warning.png" valign="top"> <spring:message code="screen.capslock.on" /></p></span>
         </section>
 
+        <!--
         <section class="row check">
-            <input id="warn" name="warn" value="true" tabindex="3" accesskey="<spring:message code="screen.welcome.label.warn.accesskey" />" type="checkbox" />
-            <label for="warn"><spring:message code="screen.welcome.label.warn" /></label>
+            <p>
+                <input id="warn" name="warn" value="true" tabindex="3" accesskey="<spring:message code="screen.welcome.label.warn.accesskey" />" type="checkbox" />
+                <label for="warn"><spring:message code="screen.welcome.label.warn" /></label>
+                <br/>
+                <input id="publicWorkstation" name="publicWorkstation" value="false" tabindex="4" type="checkbox" />
+                <label for="publicWorkstation"><spring:message code="screen.welcome.label.publicstation" /></label>
+                <br/>
+                <input type="checkbox" name="rememberMe" id="rememberMe" value="true" tabindex="5"  />
+                <label for="rememberMe"><spring:message code="screen.rememberme.checkbox.title" /></label>
+            </p>
         </section>
+        -->
 
         <section class="row btn-row">
             <input type="hidden" name="lt" value="${loginTicket}" />
             <input type="hidden" name="execution" value="${flowExecutionKey}" />
             <input type="hidden" name="_eventId" value="submit" />
 
-            <input class="btn-submit" name="submit" accesskey="l" value="<spring:message code="screen.welcome.button.login" />" tabindex="4" type="submit" />
-            <input class="btn-reset" name="reset" accesskey="c" value="<spring:message code="screen.welcome.button.clear" />" tabindex="5" type="reset" />
+            <input class="btn-submit" name="submit" accesskey="l" value="<spring:message code="screen.welcome.button.login" />" tabindex="6" type="submit" />
+            <input class="btn-reset" name="reset" accesskey="c" value="<spring:message code="screen.welcome.button.clear" />" tabindex="7" type="reset" />
         </section>
     </form:form>
 </div>
@@ -100,6 +108,19 @@
 <div id="sidebar">
     <div class="sidebar-content">
         <p><spring:message code="screen.welcome.security" /></p>
+
+        <c:if test="${!empty pac4jUrls}">
+            <div id="list-providers">
+                <h3><spring:message code="screen.welcome.label.loginwith" /></h3>
+                <form>
+                    <ul>
+                        <c:forEach var="entry" items="${pac4jUrls}">
+                            <li><a href="${entry.value}">${entry.key}</a></li>
+                        </c:forEach>
+                    </ul>
+                </form>
+            </div>
+        </c:if>
 
         <div id="list-languages">
             <%final String queryString = request.getQueryString() == null ? "" : request.getQueryString().replaceAll("&locale=([A-Za-z][A-Za-z]_)?[A-Za-z][A-Za-z]|^locale=([A-Za-z][A-Za-z]_)?[A-Za-z][A-Za-z]", "");%>
@@ -125,6 +146,7 @@
                             <option value="de">Deutsch</option>
                             <option value="ja">Japanese</option>
                             <option value="hr">Croatian</option>
+                            <option value="uk">Ukranian</option>
                             <option value="cs">Czech</option>
                             <option value="sl">Slovenian</option>
                             <option value="pl">Polish</option>
@@ -154,6 +176,7 @@
                         <li><a href="${loginUrl}de">Deutsch</a></li>
                         <li><a href="${loginUrl}ja">Japanese</a></li>
                         <li><a href="${loginUrl}hr">Croatian</a></li>
+                        <li><a href="${loginUrl}uk">Ukranian</a></li>
                         <li><a href="${loginUrl}cs">Czech</a></li>
                         <li><a href="${loginUrl}sl">Slovenian</a></li>
                         <li><a href="${loginUrl}ca">Catalan</a></li>

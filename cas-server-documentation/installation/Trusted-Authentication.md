@@ -13,54 +13,21 @@ Trusted authentication handler support is enabled by including the following dep
 {% highlight xml %}
 <dependency>
   <groupId>org.jasig.cas</groupId>
-  <artifactId>cas-server-support-trusted</artifactId>
+  <artifactId>cas-server-support-trusted-webflow</artifactId>
   <version>${cas.version}</version>
 </dependency>
 {% endhighlight %}
 
 
 ## Configure Trusted Authentication Handler
-Modify `deployerConfigContext.xml` according to the following template:
+Update `deployerConfigContext.xml` according to the following template:
 
 {% highlight xml %}
-<bean id="trustedHandler"
-      class="org.jasig.cas.adaptors.trusted.authentication.handler.support.PrincipalBearingCredentialsAuthenticationHandler" />
-
-<bean id="trustedPrincipalResolver"
-      class="org.jasig.cas.adaptors.trusted.authentication.principal.PrincipalBearingPrincipalResolver" />
-
-<bean id="authenticationManager"
-      class="org.jasig.cas.authentication.PolicyBasedAuthenticationManager">
-  <constructor-arg>
-    <map>
-      <entry key-ref="trustedHandler" value-ref="trustedPrincipalResolver"/>
-    </map>
-  </constructor-arg>
-  <property name="authenticationMetaDataPopulators">
-    <list>
-      <bean class="org.jasig.cas.authentication.SuccessfulHandlerMetaDataPopulator" />
-    </list>
-  </property>
-</bean>
-{% endhighlight %}
-
-
-## Configure Webflow Components
-Add an additional state to `login-webflow.xml`:
-
-{% highlight xml %}
-<action-state id="remoteAuthenticate">
-  <evaluate expression="principalFromRemoteAction" />.
-  <transition on="success" to="sendTicketGrantingTicket" />
-  <transition on="error" to="viewLoginForm" />
-</action-state>
-{% endhighlight %}
-
-Replace references to `viewLoginForm` in existing states with `remoteAuthenticate`.
-
-Install the Webflow action into the Spring context by adding the following bean to `cas-servlet.xml`:
-{% highlight xml %}
-<bean id="principalFromRemoteAction"
-      class="org.jasig.cas.adaptors.trusted.web.flow.PrincipalFromRequestRemoteUserNonInteractiveCredentialsAction"
-      p:centralAuthenticationService-ref="centralAuthenticationService" />
+...
+<entry key-ref="principalBearingCredentialsAuthenticationHandler"
+       value-ref="trustedPrincipalResolver" />
+<util:list id="authenticationMetadataPopulators">
+  <ref bean="successfulHandlerMetaDataPopulator" />
+</util:list>
+...
 {% endhighlight %}

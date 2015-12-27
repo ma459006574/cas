@@ -1,24 +1,6 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas;
 
-import org.jasig.cas.authentication.principal.DefaultPrincipalFactory;
+import org.jasig.cas.authentication.principal.PrincipalFactory;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.core.io.FileSystemResource;
@@ -42,6 +24,7 @@ public class WiringTests {
     public void setUp() {
         applicationContext = new XmlWebApplicationContext();
         applicationContext.setConfigLocations(
+                "classpath:/webappContext.xml",
                 "file:src/main/webapp/WEB-INF/cas-servlet.xml",
                 "file:src/main/webapp/WEB-INF/deployerConfigContext.xml",
         "file:src/main/webapp/WEB-INF/spring-configuration/*.xml");
@@ -66,10 +49,10 @@ public class WiringTests {
 
     @Test
     public void checkPrincipalFactory() throws Exception {
-        final DefaultPrincipalFactory factory1 =
-                applicationContext.getBean("principalFactory", DefaultPrincipalFactory.class);
-        final DefaultPrincipalFactory factory2 =
-                applicationContext.getBean("principalFactory", DefaultPrincipalFactory.class);
-        assertNotEquals("principal factories should be unique instances", factory1, factory2);
+        final PrincipalFactory factory1 =
+                applicationContext.getBean("principalFactory", PrincipalFactory.class);
+        final PrincipalFactory factory2 =
+                applicationContext.getBean("principalFactory", PrincipalFactory.class);
+        assertEquals("principal factories should be equal instances", factory1, factory2);
     }
 }

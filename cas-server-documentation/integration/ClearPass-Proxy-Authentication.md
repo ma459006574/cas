@@ -5,7 +5,7 @@ title: CAS - ClearPass
 
 # ClearPass: Credential Caching and Replay
 
-<div class="alert alert-warning"><strong>Deprecated!</strong><p>Exercising ClearPass via the architecture and configuration that is described below is deprecated. Consider [using the alternative](ClearPass.html) that would allow adopters to consume the credential directly in the CAS validation response.</p></div>
+<div class="alert alert-warning"><strong>Deprecated!</strong><p>Exercising ClearPass via the architecture and configuration that is described below is deprecated. Consider <a href="ClearPass.html">using the alternative</a> that would allow adopters to consume the credential directly in the CAS validation response.</p></div>
 
 To enable single sign-on into some legacy application it may be necessary to provide them with the actual cleartext password. While such approach inevitably increases security risk, at times this may be a necessary evil in order to integrate applications with CAS.
 
@@ -47,10 +47,10 @@ Support is enabled by including the following dependency in the Maven WAR overla
 
 {% highlight xml %}
 <dependency>
-	<groupId>org.jasig.cas</groupId>
-	<artifactId>cas-server-extension-clearpass</artifactId>
-	<version>${cas.version}</version>
-	<scope>runtime</scope>
+    <groupId>org.jasig.cas</groupId>
+    <artifactId>cas-server-extension-clearpass</artifactId>
+    <version>${cas.version}</version>
+    <scope>runtime</scope>
 </dependency>
 {% endhighlight %}
 
@@ -85,7 +85,6 @@ Uncomment the below element that is responsible for capturing and caching the pa
   <list>
     <bean class="org.jasig.cas.extension.clearpass.CacheCredentialsMetaDataPopulator"
       c:credentialCache-ref="encryptedMap" />
-    </bean>
   </list>
 </property>
 {% endhighlight %}
@@ -196,8 +195,8 @@ By default ClearPass is setup to use a non-distrbuted EhCache to store its passw
     p:bootstrapCacheLoader-ref="ticketCacheBootstrapCacheLoader" 
     p:cacheEventListeners-ref="ticketRMISynchronousCacheReplicator"
     p:cacheName="org.jasig.cas.extension.clearpass.CACHE"
-    p:timeToIdle="720"
-    p:timeToLive="720" />
+    p:timeToIdle="7201"
+    p:timeToLive="7201" />
 
 <bean id="ticketRMISynchronousCacheReplicator" class="net.sf.ehcache.distribution.RMISynchronousCacheReplicator">
     <constructor-arg name="replicatePuts" value="true"/> 
@@ -228,13 +227,13 @@ By default ClearPass is setup to use a non-distrbuted EhCache to store its passw
 
 <bean id="handlerMappingClearPass" class="org.springframework.web.servlet.handler.SimpleUrlHandlerMapping"
     p:alwaysUseFullPath="true">
-	<property name="mappings">
-		<props>
-			<prop key="/clearPass">
+    <property name="mappings">
+        <props>
+            <prop key="/clearPass">
                 clearPassController
             </prop>
         </props>
-	</property>
+    </property>
 </bean>
 {% endhighlight %}
 
@@ -246,8 +245,8 @@ By default ClearPass is setup to use a non-distrbuted EhCache to store its passw
          xsi:noNamespaceSchemaLocation="http://ehcache.sf.net/ehcache.xsd">
 
    <diskStore path="java.io.tmpdir/cas"/>
-	
-	 <cacheManagerPeerProviderFactory 
+    
+     <cacheManagerPeerProviderFactory 
                 class="net.sf.ehcache.distribution.RMICacheManagerPeerProviderFactory"
                 properties="peerDiscovery=manual,
                 rmiUrls=//10.1.1.123:40002/org.jasig.cas.extension.clearpass.CACHE" />

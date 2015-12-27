@@ -1,31 +1,14 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.saml.web.view;
 
 import org.jasig.cas.authentication.principal.WebApplicationService;
+import org.jasig.cas.support.saml.authentication.principal.SamlServiceFactory;
 import org.jasig.cas.support.saml.util.Saml10ObjectBuilder;
-import org.jasig.cas.support.saml.web.support.SamlArgumentExtractor;
-import org.jasig.cas.web.view.AbstractCasView;
+import org.jasig.cas.web.support.ArgumentExtractor;
+import org.jasig.cas.web.support.DefaultArgumentExtractor;
+import org.jasig.cas.services.web.view.AbstractCasView;
 import org.joda.time.DateTime;
-import org.opensaml.DefaultBootstrap;
-import org.opensaml.saml1.core.Response;
-import org.opensaml.xml.ConfigurationException;
+
+import org.opensaml.saml.saml1.core.Response;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -46,7 +29,7 @@ public abstract class AbstractSaml10ResponseView extends AbstractCasView {
      */
     protected final Saml10ObjectBuilder samlObjectBuilder = new Saml10ObjectBuilder();
 
-    private final SamlArgumentExtractor samlArgumentExtractor = new SamlArgumentExtractor();
+    private final ArgumentExtractor samlArgumentExtractor;
 
     @NotNull
     private String encoding = DEFAULT_ENCODING;
@@ -54,12 +37,11 @@ public abstract class AbstractSaml10ResponseView extends AbstractCasView {
     /** Defaults to 0. */
     private int skewAllowance;
 
-    static {
-        try {
-            DefaultBootstrap.bootstrap();
-        } catch (final ConfigurationException e) {
-            throw new IllegalStateException("Error initializing OpenSAML library.", e);
-        }
+    /**
+     * Instantiates a new saml 10 response view.
+     */
+    public AbstractSaml10ResponseView() {
+        samlArgumentExtractor = new DefaultArgumentExtractor(new SamlServiceFactory());
     }
 
     /**
@@ -75,7 +57,7 @@ public abstract class AbstractSaml10ResponseView extends AbstractCasView {
     * Sets the allowance for time skew in seconds
     * between CAS and the client server.  Default 0s.
     * This value will be subtracted from the current time when setting the SAML
-    * <code>NotBeforeDate</code> attribute, thereby allowing for the
+    * {@code NotBeforeDate} attribute, thereby allowing for the
     * CAS server to be ahead of the client by as much as the value defined here.
     *
     * <p><strong>Note:</strong> Skewing of the issue instant via setting this property

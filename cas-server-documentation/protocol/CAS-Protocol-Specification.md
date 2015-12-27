@@ -22,7 +22,7 @@ Contributors:
 -   Robert Oschwald [CAS 3.0]
 -   Misagh Moayyed
 
-Version: 3.0.1
+Version: 3.0.2
 
 Release Date: 2015-01-13
 
@@ -91,7 +91,7 @@ components to be accessible through specific URIs. This section will discuss
 each of the URIs:
 
 | URI                               | Description
-|-----------------------------------+------------------------------------------+
+|-----------------------------------|-------------------------------------------
 | `/login`                          | credential requestor / acceptor
 | `/logout`                         | destroy CAS session (logout)
 | `/validate`                       | service ticket validation
@@ -558,7 +558,11 @@ are case sensitive and MUST all be handled by `/serviceValidate`.
     primary credentials. It will fail if the ticket was issued from a single
     sign-on session.
 
-
+-   `format` [OPTIONAL] - if this parameter is set, ticket validation response
+    MUST be produced based on the parameter value. Supported values are `XML`
+    and `JSON`. If this parameter is not set, the default `XML` format will be used. 
+    If the parameter value is not supported by the CAS server, an error code
+    MUST be returned as is described in section [2.5.3](<#head2.5.3>). 
 
 <a name="head2.5.2"/>
 
@@ -577,14 +581,38 @@ in the XML schema in Appendix A. Below are example responses:
  </cas:authenticationSuccess>
 </cas:serviceResponse>
 {% endhighlight %}
+
+
+{% highlight json %}
+{
+  "serviceResponse" : {
+    "authenticationSuccess" : {
+      "user" : "username",
+      "proxyGrantingTicket" : "PGTIOU-84678-8a9d..."
+    }
+  }
+}
+{% endhighlight %}
+
 **On ticket validation failure:**
 
 {% highlight xml %}
 <cas:serviceResponse xmlns:cas="http://www.yale.edu/tp/cas">
  <cas:authenticationFailure code="INVALID_TICKET">
-    Ticket ST-1856339-aA5Yuvrxzpv8Tau1cYQ7 not recognized`
+    Ticket ST-1856339-aA5Yuvrxzpv8Tau1cYQ7 not recognized
   </cas:authenticationFailure>
 </cas:serviceResponse>
+{% endhighlight %}
+
+{% highlight json %}
+{
+  "serviceResponse" : {
+    "authenticationFailure" : {
+      "code" : "INVALID_TICKET",
+      "description" : "Ticket ST-1856339-aA5Yuvrxzpv8Tau1cYQ7 not recognized"
+    }
+  }
+}
 {% endhighlight %}
 
 For proxy responses, see section [2.6.2](<#head2.6.2>).
@@ -619,8 +647,6 @@ servers MUST implement. Implementations MAY include others.
 
 For all error codes, it is RECOMMENDED that CAS provide a more detailed message
 as the body of the `\<cas:authenticationFailure\>` block of the XML response.
-
-
 
 <a name="head2.5.4"/>
 
@@ -719,7 +745,7 @@ Pass in a callback URL for proxying:
         <cas:firstname>John</cas:firstname>
         <cas:lastname>Doe</cas:lastname>
         <cas:title>Mr.</cas:title>
-        <cas:email>jdoe@example.orgmailto:jdoe@example.org</cas:email>
+        <cas:email>jdoe@example.org</cas:email>
         <cas:affiliation>staff</cas:affiliation>
         <cas:affiliation>faculty</cas:affiliation>
       </cas:attributes>
@@ -728,6 +754,24 @@ Pass in a callback URL for proxying:
   </cas:serviceResponse>
 {% endhighlight %}
 
+{% highlight json %}
+{
+  "serviceResponse" : {
+    "authenticationSuccess" : {
+      "user" : "username",
+      "proxyGrantingTicket" : "PGTIOU-84678-8a9d...",
+      "proxies" : [ "https://proxy1/pgtUrl", "https://proxy2/pgtUrl" ],
+      "attributes" : {
+        "firstName" : "John",
+        "affiliation" : [ "staff", "faculty" ],
+        "title" : "Mr.",
+        "email" : "jdoe@example.orgmailto:jdoe@example.org",
+        "lastname" : "Doe"
+      }
+    }
+  }
+}
+{% endhighlight %}
 
 <a name="head2.6"/>
 
@@ -772,6 +816,19 @@ Response on ticket validation success:
   </cas:serviceResponse>
 {% endhighlight %}
 
+{% highlight json %}
+{
+  "serviceResponse" : {
+    "authenticationSuccess" : {
+      "user" : "username",
+      "proxyGrantingTicket" : "PGTIOU-84678-8a9d...",
+      "proxies" : [ "https://proxy1/pgtUrl", "https://proxy2/pgtUrl" ]
+    }
+  }
+}
+{% endhighlight %}
+
+
 >   Note: when authentication has proceeded through multiple proxies, the order
 >   in which the proxies were traversed MUST be reflected in the \<cas:proxies\>
 >   block. The most recently-visited proxy MUST be the first proxy listed, and
@@ -790,6 +847,16 @@ Response on ticket validation failure:
   </cas:serviceResponse>
 {% endhighlight %}
 
+{% highlight json %}
+{
+  "serviceResponse" : {
+    "authenticationFailure" : {
+      "code" : "INVALID_TICKET",
+      "description" : "Ticket PT-1856339-aA5Yuvrxzpv8Tau1cYQ7 not recognized"
+    }
+  }
+}
+{% endhighlight %}
 
 <a name="head2.6.3"/>
 
@@ -861,6 +928,16 @@ Response on request failure:
   </cas:serviceResponse>
 {% endhighlight %}
 
+{% highlight json %}
+{
+  "serviceResponse" : {
+    "authenticationFailure" : {
+      "code" : "INVALID_REQUEST",
+      "description" : "'pgt' and 'targetService' parameters are both required"
+    }
+  }
+}
+{% endhighlight %}
 
 <a name="head2.7.3"/>
 
@@ -912,7 +989,7 @@ Section [2.5.1](<#head2.5.1>).
 **2.9. /p3/proxyValidate [CAS 3.0]**
 ---------------------------------
 
-`/p3/proxyValidate` MUST perform the same validation tasks as `/p3/proxyValidate` and
+`/p3/proxyValidate` MUST perform the same validation tasks as `/p3/serviceValidate` and
 additionally validate proxy tickets. See Section [2.8](<#head2.5>).
 
 <a name="head2.8.1"/>
@@ -1336,24 +1413,20 @@ SAML 1.0 or 1.1 request XML document of document type "text/xml".
 ### **4.2.4 Example of /samlValidate POST request**
 
 {% highlight bash %}
-POST /cas/samlValidate?ticket=
+POST /cas/samlValidate?TARGET=
 Host: cas.example.com
 Content-Length: 491
 Content-Type: text/xml 
 {% endhighlight %}
 
 {% highlight xml %}
-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"http://schemas.xmlsoap.org/soap/envelope/>
-  <SOAP-ENV:Header/>
-  <SOAP-ENV:Body>
-    <samlp:Request xmlns:samlphttp://xmlnssamlp="urn:oasis:names:tc:SAML:1.0:protocol" MajorVersion="1"
-      MinorVersion="1" RequestID="_192.168.16.51.1024506224022"
-      IssueInstant="2002-06-19T17:03:44.022Z">
-      <samlp:AssertionArtifact>
-        ST-1-u4hrm3td92cLxpCvrjylcas.example.com
-      </samlp:AssertionArtifact>
-    </samlp:Request>
-  </SOAP-ENV:Body>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
+	<SOAP-ENV:Header/>
+	<SOAP-ENV:Body>
+		<samlp:Request xmlns:samlp="urn:oasis:names:tc:SAML:1.0:protocol" MajorVersion="1" MinorVersion="1" RequestID="_192.168.16.51.1024506224022" IssueInstant="2002-06-19T17:03:44.022Z">
+			<samlp:AssertionArtifact>ST-1-u4hrm3td92cLxpCvrjylcas.example.com</samlp:AssertionArtifact>
+		</samlp:Request>
+	</SOAP-ENV:Body>
 </SOAP-ENV:Envelope>
 {% endhighlight %}
 
@@ -1530,7 +1603,19 @@ to the CAS client.
 
 {% highlight xml %}
 <cas:attributes>
-    <cas:[attribute-name]>VALUE</cas:attribute>
+    ...
+    <cas:[attribute-name]>VALUE</cas:[attribute-name]>
+</cas:attributes>
+{% endhighlight %}
+
+> Example response with custom attribute:
+
+{% highlight xml %}
+<cas:attributes>
+    <cas:authenticationDate>2015-11-12T09:30:10Z</cas:authenticationDate>
+    <cas:longTermAuthenticationRequestTokenUsed>true</cas:longTermAuthenticationRequestTokenUsed>
+    <cas:isFromNewLogin>true</cas:isFromNewLogin>
+    <cas:myAttribute>myValue</cas:myAttribute>
 </cas:attributes>
 {% endhighlight %}
 

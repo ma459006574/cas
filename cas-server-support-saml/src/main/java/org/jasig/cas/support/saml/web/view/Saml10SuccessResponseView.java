@@ -1,35 +1,18 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.saml.web.view;
 
 import org.jasig.cas.CasProtocolConstants;
 import org.jasig.cas.authentication.Authentication;
 import org.jasig.cas.authentication.RememberMeCredential;
 import org.jasig.cas.authentication.principal.Service;
+import org.jasig.cas.services.RegisteredService;
 import org.jasig.cas.support.saml.authentication.SamlAuthenticationMetaDataPopulator;
 import org.joda.time.DateTime;
-import org.opensaml.saml1.core.Assertion;
-import org.opensaml.saml1.core.AuthenticationStatement;
-import org.opensaml.saml1.core.Conditions;
-import org.opensaml.saml1.core.Response;
-import org.opensaml.saml1.core.StatusCode;
-import org.opensaml.saml1.core.Subject;
+import org.opensaml.saml.saml1.core.Assertion;
+import org.opensaml.saml.saml1.core.AuthenticationStatement;
+import org.opensaml.saml.saml1.core.Conditions;
+import org.opensaml.saml.saml1.core.Response;
+import org.opensaml.saml.saml1.core.StatusCode;
+import org.opensaml.saml.saml1.core.Subject;
 
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
@@ -82,7 +65,7 @@ public final class Saml10SuccessResponseView extends AbstractSaml10ResponseView 
                 SamlAuthenticationMetaDataPopulator.ATTRIBUTE_AUTHENTICATION_METHOD);
 
         final AuthenticationStatement authnStatement = this.samlObjectBuilder.newAuthenticationStatement(
-                authentication.getAuthenticationDate(), authenticationMethod, getPrincipal(model).getId());
+                authentication.getAuthenticationDate().toDate(), authenticationMethod, getPrincipal(model).getId());
 
         final Assertion assertion = this.samlObjectBuilder.newAssertion(authnStatement, this.issuer, issuedAt,
                 this.samlObjectBuilder.generateSecureRandomId());
@@ -90,7 +73,7 @@ public final class Saml10SuccessResponseView extends AbstractSaml10ResponseView 
         assertion.setConditions(conditions);
 
         final Subject subject = this.samlObjectBuilder.newSubject(getPrincipal(model).getId());
-        final Map<String, Object> attributesToSend = prepareSamlAttributes(model);
+        final Map<String, Object> attributesToSend = prepareSamlAttributes(model, service);
 
         if (!attributesToSend.isEmpty()) {
             assertion.getAttributeStatements().add(this.samlObjectBuilder.newAttributeStatement(
@@ -111,17 +94,23 @@ public final class Saml10SuccessResponseView extends AbstractSaml10ResponseView 
      * @return the final map
      * @since 4.1.0
      */
-    private Map<String, Object> prepareSamlAttributes(final Map<String, Object> model) {
-        final Map<String, Object> authnAttributes =
+    private Map<String, Object> prepareSamlAttributes(final Map<String, Object> model, final Service service) {
+        final Map<String, Object> authnAttributes = new HashMap<>(getAuthenticationAttributesAsMultiValuedAttributes(model));
                 new HashMap<>(getAuthenticationAttributesAsMultiValuedAttributes(model));
         if (isRememberMeAuthentication(model)) {
             authnAttributes.remove(RememberMeCredential.AUTHENTICATION_ATTRIBUTE_REMEMBER_ME);
             authnAttributes.put(this.rememberMeAttributeName, Boolean.TRUE.toString());
         }
+        final RegisteredService registeredService = this.servicesManager.findServiceBy(service);
         final Map<String, Object> attributesToReturn = new HashMap<>();
         attributesToReturn.putAll(getPrincipalAttributesAsMultiValuedAttributes(model));
         attributesToReturn.putAll(authnAttributes);
-        return attributesToReturn;
+
+        decideIfCredentialPasswordShouldBeReleasedAsAttribute(attributesToReturn, model, registeredService);
+        decideIfProxyGrantingTicketShouldBeReleasedAsAttribute(attributesToReturn, model, registeredService);
+
+        final Map<String, Object> finalAttributes = this.casAttributeEncoder.encodeAttributes(attributesToReturn, service);
+        return finalAttributes;
     }
 
     public void setIssueLength(final long issueLength) {

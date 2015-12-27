@@ -1,25 +1,39 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.ticket.registry.support.kryo;
 
-import static org.junit.Assert.assertEquals;
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.serializers.FieldSerializer;
+import net.spy.memcached.CachedData;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.jasig.cas.authentication.AcceptUsersAuthenticationHandler;
+import org.jasig.cas.authentication.Authentication;
+import org.jasig.cas.authentication.AuthenticationBuilder;
+import org.jasig.cas.authentication.AuthenticationHandler;
+import org.jasig.cas.authentication.BasicCredentialMetaData;
+import org.jasig.cas.authentication.Credential;
+import org.jasig.cas.authentication.CredentialMetaData;
+import org.jasig.cas.authentication.DefaultAuthenticationBuilder;
+import org.jasig.cas.authentication.DefaultHandlerResult;
+import org.jasig.cas.authentication.HttpBasedServiceCredential;
+import org.jasig.cas.authentication.PreventedException;
+import org.jasig.cas.authentication.RememberMeCredential;
+import org.jasig.cas.authentication.UsernamePasswordCredential;
+import org.jasig.cas.authentication.principal.DefaultPrincipalFactory;
+import org.jasig.cas.authentication.principal.PrincipalFactory;
+import org.jasig.cas.authentication.principal.Service;
+import org.jasig.cas.services.RegisteredService;
+import org.jasig.cas.services.TestUtils;
+import org.jasig.cas.ticket.ExpirationPolicy;
+import org.jasig.cas.ticket.ServiceTicket;
+import org.jasig.cas.ticket.TicketGrantingTicket;
+import org.jasig.cas.ticket.TicketGrantingTicketImpl;
+import org.jasig.cas.ticket.proxy.ProxyGrantingTicket;
+import org.jasig.cas.ticket.support.NeverExpiresExpirationPolicy;
+import org.joda.time.DateTime;
+import org.junit.Test;
 
+import javax.security.auth.login.AccountNotFoundException;
+import javax.security.auth.login.FailedLoginException;
+import javax.validation.constraints.NotNull;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.GeneralSecurityException;
@@ -33,33 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import javax.security.auth.login.FailedLoginException;
-import javax.validation.constraints.NotNull;
-
-import org.apache.commons.collections.map.ListOrderedMap;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.jasig.cas.authentication.Authentication;
-import org.jasig.cas.authentication.AuthenticationBuilder;
-import org.jasig.cas.authentication.AuthenticationHandler;
-import org.jasig.cas.authentication.BasicCredentialMetaData;
-import org.jasig.cas.authentication.Credential;
-import org.jasig.cas.authentication.CredentialMetaData;
-import org.jasig.cas.authentication.HandlerResult;
-import org.jasig.cas.authentication.HttpBasedServiceCredential;
-import org.jasig.cas.authentication.PreventedException;
-import org.jasig.cas.authentication.RememberMeCredential;
-import org.jasig.cas.authentication.UsernamePasswordCredential;
-import org.jasig.cas.authentication.principal.DefaultPrincipalFactory;
-import org.jasig.cas.authentication.principal.PrincipalFactory;
-import org.jasig.cas.authentication.principal.Service;
-import org.jasig.cas.services.RegisteredServiceImpl;
-import org.jasig.cas.ticket.ExpirationPolicy;
-import org.jasig.cas.ticket.ServiceTicket;
-import org.jasig.cas.ticket.TicketGrantingTicket;
-import org.junit.Test;
-
-import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.serializers.FieldSerializer;
+import static org.junit.Assert.*;
 
 /**
  * Unit test for {@link KryoTranscoder} class.
@@ -94,8 +82,45 @@ public class KryoTranscoderTests {
         transcoder.setSerializerMap(serializerMap);
         transcoder.initialize();
 
-        this.principalAttributes = new HashMap<String, Object>();
+        this.principalAttributes = new HashMap<>();
         this.principalAttributes.put(NICKNAME_KEY, NICKNAME_VALUE);
+    }
+
+    @Test
+    public void verifyEncodeDecodeTGTImpl() throws Exception {
+        final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
+        final AuthenticationBuilder bldr = new DefaultAuthenticationBuilder(
+                new DefaultPrincipalFactory()
+                        .createPrincipal("user", Collections.unmodifiableMap(this.principalAttributes)));
+        bldr.setAttributes(Collections.unmodifiableMap(this.principalAttributes));
+        bldr.setAuthenticationDate(new DateTime());
+        bldr.addCredential(new BasicCredentialMetaData(userPassCredential));
+        bldr.addFailure("error", AccountNotFoundException.class);
+        bldr.addSuccess("authn", new DefaultHandlerResult(
+                new AcceptUsersAuthenticationHandler(),
+                new BasicCredentialMetaData(userPassCredential)));
+
+        new TicketGrantingTicketImpl(TGT_ID,
+                org.jasig.cas.authentication.TestUtils.getService(), null, bldr.build(),
+                new NeverExpiresExpirationPolicy());
+
+        final TicketGrantingTicket expectedTGT =
+                new TicketGrantingTicketImpl(TGT_ID,
+                        org.jasig.cas.services.TestUtils.getService(),
+                        null, bldr.build(),
+                        new NeverExpiresExpirationPolicy());
+
+        final ServiceTicket ticket = expectedTGT.grantServiceTicket(ST_ID,
+                org.jasig.cas.services.TestUtils.getService(),
+                new NeverExpiresExpirationPolicy(), false, true);
+        CachedData result = transcoder.encode(expectedTGT);
+        final TicketGrantingTicket resultTicket = (TicketGrantingTicket) transcoder.decode(result);
+
+        assertEquals(expectedTGT, resultTicket);
+        result = transcoder.encode(ticket);
+        final ServiceTicket resultStTicket = (ServiceTicket) transcoder.decode(result);
+        assertEquals(ticket, resultStTicket);
+
     }
 
     @Test
@@ -106,7 +131,7 @@ public class KryoTranscoderTests {
 
         final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
         final TicketGrantingTicket expectedTGT = new MockTicketGrantingTicket(TGT_ID, userPassCredential, this.principalAttributes);
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
 
         internalProxyTest("http://localhost");
@@ -114,12 +139,10 @@ public class KryoTranscoderTests {
     }
 
     private void internalProxyTest(final String proxyUrl) throws MalformedURLException {
-        final RegisteredServiceImpl svc = new RegisteredServiceImpl();
-        svc.setServiceId("https://some.app.edu");
-        final Credential proxyCredential = new HttpBasedServiceCredential(new URL(proxyUrl), svc);
+        final Credential proxyCredential = new HttpBasedServiceCredential(new URL(proxyUrl), TestUtils.getRegisteredService("https://.+"));
         final TicketGrantingTicket expectedTGT = new MockTicketGrantingTicket(TGT_ID, proxyCredential, this.principalAttributes);
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
-        assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));        
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
+        assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
     @Test
@@ -127,7 +150,7 @@ public class KryoTranscoderTests {
         final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
         final TicketGrantingTicket expectedTGT =
                 new MockTicketGrantingTicket(TGT_ID, userPassCredential, Collections.unmodifiableMap(this.principalAttributes));
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
@@ -139,7 +162,7 @@ public class KryoTranscoderTests {
         final Map<String, Object> newAttributes = new HashMap<>();
         newAttributes.put(NICKNAME_KEY, Collections.unmodifiableList(values));
         final TicketGrantingTicket expectedTGT = new MockTicketGrantingTicket(TGT_ID, userPassCredential, newAttributes);
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
@@ -148,7 +171,7 @@ public class KryoTranscoderTests {
         final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
         final TicketGrantingTicket expectedTGT =
                 new MockTicketGrantingTicket(TGT_ID, userPassCredential, new LinkedHashMap<String, Object>(this.principalAttributes));
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
@@ -157,8 +180,8 @@ public class KryoTranscoderTests {
         final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
         @SuppressWarnings("unchecked")
         final TicketGrantingTicket expectedTGT =
-                new MockTicketGrantingTicket(TGT_ID, userPassCredential, ListOrderedMap.decorate(this.principalAttributes));
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+                new MockTicketGrantingTicket(TGT_ID, userPassCredential, this.principalAttributes);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
@@ -170,7 +193,7 @@ public class KryoTranscoderTests {
         newAttributes.put(NICKNAME_KEY, Collections.unmodifiableSet(values));
         final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
         final TicketGrantingTicket expectedTGT = new MockTicketGrantingTicket(TGT_ID, userPassCredential, newAttributes);
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
@@ -180,7 +203,7 @@ public class KryoTranscoderTests {
         newAttributes.put(NICKNAME_KEY, Collections.singleton(NICKNAME_VALUE));
         final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
         final TicketGrantingTicket expectedTGT = new MockTicketGrantingTicket(TGT_ID, userPassCredential, newAttributes);
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
@@ -189,54 +212,69 @@ public class KryoTranscoderTests {
         final Map<String, Object> newAttributes = Collections.singletonMap(NICKNAME_KEY, (Object) NICKNAME_VALUE);
         final Credential userPassCredential = new UsernamePasswordCredential(USERNAME, PASSWORD);
         final TicketGrantingTicket expectedTGT = new MockTicketGrantingTicket(TGT_ID, userPassCredential, newAttributes);
-        expectedTGT.grantServiceTicket(ST_ID, null, null, false);
+        expectedTGT.grantServiceTicket(ST_ID, null, null, false, true);
         assertEquals(expectedTGT, transcoder.decode(transcoder.encode(expectedTGT)));
     }
 
-    static class MockServiceTicket implements ServiceTicket {
+    @Test
+    public void verifyEncodeDecodeRegisteredService() throws Exception {
+        final RegisteredService service = TestUtils.getRegisteredService("helloworld");
+        assertEquals(service, transcoder.decode(transcoder.encode(service)));
+    }
+
+    private static class MockServiceTicket implements ServiceTicket {
 
         private static final long serialVersionUID = -206395373480723831L;
         private String id;
 
         MockServiceTicket() { /* for serialization */ }
 
-        public MockServiceTicket(final String id) {
+        MockServiceTicket(final String id) {
             this.id = id;
         }
 
+        @Override
         public Service getService() {
             return null;
         }
 
+        @Override
         public boolean isFromNewLogin() {
             return false;
         }
 
+        @Override
         public boolean isValidFor(final Service service) {
             return false;
         }
 
-        public TicketGrantingTicket grantTicketGrantingTicket(final String id, final Authentication authentication,
-                final ExpirationPolicy expirationPolicy) {
+        @Override
+        public ProxyGrantingTicket grantProxyGrantingTicket(final String id, final Authentication authentication,
+                                                            final ExpirationPolicy expirationPolicy) {
             return null;
         }
 
+        @Override
         public String getId() {
             return id;
         }
 
+        @Override
         public boolean isExpired() {
             return false;
         }
 
+        @Override
         public TicketGrantingTicket getGrantingTicket() {
             return null;
         }
 
+        @Override
         public long getCreationTime() {
             return 0;
         }
 
+        @Override
         public int getCountOfUses() {
             return 0;
         }
@@ -245,7 +283,7 @@ public class KryoTranscoderTests {
         public boolean equals(final Object other) {
             return other instanceof MockServiceTicket && ((MockServiceTicket) other).getId().equals(id);
         }
-        
+
         @Override
         public int hashCode() {
             final HashCodeBuilder bldr = new HashCodeBuilder(17, 33);
@@ -254,7 +292,7 @@ public class KryoTranscoderTests {
         }
     }
 
-    static class MockTicketGrantingTicket implements TicketGrantingTicket {
+    private static class MockTicketGrantingTicket implements TicketGrantingTicket {
 
         private static final long serialVersionUID = 4829406617873497061L;
 
@@ -262,13 +300,15 @@ public class KryoTranscoderTests {
 
         private int usageCount;
 
+        private Service proxiedBy;
+
         private final Date creationDate = new Date();
 
         private final Authentication authentication;
 
         /** Factory to create the principal type. **/
         @NotNull
-        private PrincipalFactory principalFactory = new DefaultPrincipalFactory();
+        private final PrincipalFactory principalFactory = new DefaultPrincipalFactory();
 
         /** Constructor for serialization support. */
         MockTicketGrantingTicket() {
@@ -276,12 +316,12 @@ public class KryoTranscoderTests {
             this.authentication = null;
         }
 
-        public MockTicketGrantingTicket(final String id, final Credential credential, final Map<String, Object> principalAttributes) {
+        MockTicketGrantingTicket(final String id, final Credential credential, final Map<String, Object> principalAttributes) {
             this.id = id;
             final CredentialMetaData credentialMetaData = new BasicCredentialMetaData(credential);
-            final AuthenticationBuilder builder = new AuthenticationBuilder();
+            final AuthenticationBuilder builder = new DefaultAuthenticationBuilder();
             builder.setPrincipal(this.principalFactory.createPrincipal(USERNAME, principalAttributes));
-            builder.setAuthenticationDate(new Date());
+            builder.setAuthenticationDate(new DateTime());
             builder.addCredential(credentialMetaData);
             builder.addAttribute(RememberMeCredential.AUTHENTICATION_ATTRIBUTE_REMEMBER_ME, Boolean.TRUE);
             final AuthenticationHandler handler = new MockAuthenticationHandler();
@@ -309,9 +349,15 @@ public class KryoTranscoderTests {
                 final String id,
                 final Service service,
                 final ExpirationPolicy expirationPolicy,
-                final boolean credentialsProvided) {
+                final boolean credentialsProvided,
+                final boolean onlyTrackMostRecentSession) {
             this.usageCount++;
             return new MockServiceTicket(id);
+        }
+
+        @Override
+        public Service getProxiedBy() {
+            return proxiedBy;
         }
 
         @Override
@@ -384,14 +430,14 @@ public class KryoTranscoderTests {
         }
     }
 
-    public static class MockAuthenticationHandler implements AuthenticationHandler {
+    private static class MockAuthenticationHandler implements AuthenticationHandler {
 
         @Override
-        public HandlerResult authenticate(final Credential credential) throws GeneralSecurityException, PreventedException {
+        public DefaultHandlerResult authenticate(final Credential credential) throws GeneralSecurityException, PreventedException {
             if (credential instanceof HttpBasedServiceCredential) {
-                return new HandlerResult(this, (HttpBasedServiceCredential) credential);
+                return new DefaultHandlerResult(this, (HttpBasedServiceCredential) credential);
             } else {
-                return new HandlerResult(this, new BasicCredentialMetaData(credential));
+                return new DefaultHandlerResult(this, new BasicCredentialMetaData(credential));
             }
         }
 
@@ -402,7 +448,7 @@ public class KryoTranscoderTests {
 
         @Override
         public String getName() {
-            return "MockAuthenticationHandler";
+            return this.getClass().getSimpleName();
         }
     }
 }

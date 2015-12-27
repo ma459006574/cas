@@ -1,26 +1,9 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.adaptors.x509.authentication.handler.support;
 
-import edu.vt.middleware.crypt.util.CryptReader;
+import org.cryptacular.util.CertUtil;
 import org.jasig.cas.adaptors.x509.authentication.principal.X509CertificateCredential;
 import org.jasig.cas.authentication.Credential;
+import org.jasig.cas.authentication.DefaultHandlerResult;
 import org.jasig.cas.authentication.HandlerResult;
 import org.jasig.cas.authentication.UsernamePasswordCredential;
 import org.jasig.cas.authentication.principal.DefaultPrincipalFactory;
@@ -43,7 +26,7 @@ import static org.junit.Assert.*;
  *
  * @author Scott Battaglia
  * @author Marvin S. Addison
- * @since 3.0.0.4
+ * @since 3.0.0
  *
  */
 @RunWith(Parameterized.class)
@@ -105,7 +88,7 @@ public class X509CredentialsAuthenticationHandlerTests {
         handler = new X509CredentialsAuthenticationHandler();
         handler.setTrustedIssuerDnPattern(".*");
         credential = new X509CertificateCredential(createCertificates("user-valid.crt"));
-        params.add(new Object[] {handler, credential, true, new HandlerResult(handler, credential,
+        params.add(new Object[] {handler, credential, true, new DefaultHandlerResult(handler, credential,
                 new DefaultPrincipalFactory().createPrincipal(credential.getId())),
         });
 
@@ -148,7 +131,7 @@ public class X509CredentialsAuthenticationHandlerTests {
                 handler,
                 credential,
                 true,
-                new HandlerResult(handler, credential, new DefaultPrincipalFactory().createPrincipal(credential.getId())),
+                new DefaultHandlerResult(handler, credential, new DefaultPrincipalFactory().createPrincipal(credential.getId())),
         });
 
         // Test case #7: Require key usage on a cert without keyUsage extension
@@ -172,7 +155,7 @@ public class X509CredentialsAuthenticationHandlerTests {
                 handler,
                 credential,
                 true,
-                new HandlerResult(handler, credential, new DefaultPrincipalFactory().createPrincipal(credential.getId())),
+                new DefaultHandlerResult(handler, credential, new DefaultPrincipalFactory().createPrincipal(credential.getId())),
         });
 
         // Test case #9: Require key usage on a cert with unacceptable keyUsage extension values
@@ -195,7 +178,7 @@ public class X509CredentialsAuthenticationHandlerTests {
         // Test case #10: Valid certificate with CRL checking
         handler = new X509CredentialsAuthenticationHandler();
         checker = new ResourceCRLRevocationChecker(new ClassPathResource("userCA-valid.crl"));
-        checker.afterPropertiesSet();
+        checker.init();
         handler.setRevocationChecker(checker);
         handler.setTrustedIssuerDnPattern(".*");
         credential = new X509CertificateCredential(createCertificates("user-valid.crt"));
@@ -203,13 +186,13 @@ public class X509CredentialsAuthenticationHandlerTests {
                 handler,
                 new X509CertificateCredential(createCertificates("user-valid.crt")),
                 true,
-                new HandlerResult(handler, credential, new DefaultPrincipalFactory().createPrincipal(credential.getId())),
+                new DefaultHandlerResult(handler, credential, new DefaultPrincipalFactory().createPrincipal(credential.getId())),
         });
 
         // Test case #11: Revoked end user certificate
         handler = new X509CredentialsAuthenticationHandler();
         checker = new ResourceCRLRevocationChecker(new ClassPathResource("userCA-valid.crl"));
-        checker.afterPropertiesSet();
+        checker.init();
         handler.setRevocationChecker(checker);
         handler.setTrustedIssuerDnPattern(".*");
         params.add(new Object[] {
@@ -226,7 +209,7 @@ public class X509CredentialsAuthenticationHandlerTests {
         handler.setTrustedIssuerDnPattern(".*");
         checker = new ResourceCRLRevocationChecker(new ClassPathResource("userCA-expired.crl"));
         checker.setExpiredCRLPolicy(zeroThresholdPolicy);
-        checker.afterPropertiesSet();
+        checker.init();
         handler.setRevocationChecker(checker);
         params.add(new Object[] {
                 handler,
@@ -246,7 +229,7 @@ public class X509CredentialsAuthenticationHandlerTests {
         try {
             if (this.handler.supports(this.credential)) {
                 final HandlerResult result = this.handler.authenticate(this.credential);
-                if (this.expectedResult instanceof HandlerResult) {
+                if (this.expectedResult instanceof DefaultHandlerResult) {
                     assertEquals(this.expectedResult, result);
                 } else {
                     fail("Authentication succeeded when it should have failed with " + this.expectedResult);
@@ -273,9 +256,9 @@ public class X509CredentialsAuthenticationHandlerTests {
         final X509Certificate[] certs = new X509Certificate[files.length];
 
         int i = 0;
-        for (String file : files) {
+        for (final String file : files) {
             try {
-                certs[i++] = (X509Certificate) CryptReader.readCertificate(
+                certs[i++] = (X509Certificate) CertUtil.readCertificate(
                         new ClassPathResource(file).getInputStream());
             } catch (final Exception e) {
                 throw new RuntimeException("Error creating certificate at " + file, e);

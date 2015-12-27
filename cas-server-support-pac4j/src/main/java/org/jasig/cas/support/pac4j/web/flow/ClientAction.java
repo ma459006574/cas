@@ -1,37 +1,28 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.pac4j.web.flow;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Set;
 
+import com.google.common.collect.ImmutableSet;
 import org.apache.commons.lang3.StringUtils;
+import org.jasig.cas.CasProtocolConstants;
 import org.jasig.cas.CentralAuthenticationService;
+import org.jasig.cas.authentication.AuthenticationContext;
+import org.jasig.cas.authentication.AuthenticationContextBuilder;
+import org.jasig.cas.authentication.AuthenticationSystemSupport;
+import org.jasig.cas.authentication.AuthenticationTransaction;
+import org.jasig.cas.authentication.DefaultAuthenticationContextBuilder;
+import org.jasig.cas.authentication.DefaultAuthenticationSystemSupport;
+import org.jasig.cas.authentication.principal.ClientCredential;
 import org.jasig.cas.authentication.principal.Service;
 import org.jasig.cas.authentication.principal.WebApplicationService;
-import org.jasig.cas.support.pac4j.authentication.principal.ClientCredential;
 import org.jasig.cas.ticket.TicketGrantingTicket;
 import org.jasig.cas.web.support.WebUtils;
 import org.pac4j.core.client.BaseClient;
 import org.pac4j.core.client.Client;
 import org.pac4j.core.client.Clients;
-import org.pac4j.core.client.Mechanism;
+import org.pac4j.core.client.ClientType;
+import org.pac4j.core.client.IndirectClient;
 import org.pac4j.core.context.J2EContext;
 import org.pac4j.core.context.WebContext;
 import org.pac4j.core.credentials.Credentials;
@@ -41,6 +32,11 @@ import org.pac4j.core.profile.CommonProfile;
 import org.pac4j.core.profile.ProfileHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.i18n.LocaleChangeInterceptor;
+import org.springframework.web.servlet.theme.ThemeChangeInterceptor;
 import org.springframework.webflow.action.AbstractAction;
 import org.springframework.webflow.context.ExternalContext;
 import org.springframework.webflow.context.ExternalContextHolder;
@@ -53,38 +49,28 @@ import javax.servlet.http.HttpSession;
 import javax.validation.constraints.NotNull;
 
 /**
- * This class represents an action to put at the beginning of the webflow.<br>
+ * This class represents an action to put at the beginning of the webflow.
+ * <p>
  * Before any authentication, redirection urls are computed for the different clients defined as well as the theme,
- * locale, method and service are saved into the web session.<br>
+ * locale, method and service are saved into the web session.</p>
  * After authentication, appropriate information are expected on this callback url to finish the authentication
  * process with the provider.
- *
  * @author Jerome Leleu
  * @since 3.5.0
  */
 @SuppressWarnings({ "unchecked", "rawtypes" })
+@Component("clientAction")
 public final class ClientAction extends AbstractAction {
     /**
-     * Constant for the service parameter.
+     * All the urls and names of the pac4j clients.
      */
-    public static final String SERVICE = "service";
-    /**
-     * Constant for the theme parameter.
-     */
-    public static final String THEME = "theme";
-    /**
-     * Constant for the locale parameter.
-     */
-    public static final String LOCALE = "locale";
-    /**
-     * Constant for the method parameter.
-     */
-    public static final String METHOD = "method";
+    public static final String PAC4J_URLS = "pac4jUrls";
+
     /**
      * Supported protocols.
      */
-    private static final List<Mechanism> SUPPORTED_PROTOCOLS = Arrays.asList(Mechanism.CAS_PROTOCOL, Mechanism.OAUTH_PROTOCOL,
-            Mechanism.OPENID_PROTOCOL, Mechanism.SAML_PROTOCOL);
+    private static final Set<ClientType> SUPPORTED_PROTOCOLS = ImmutableSet.of(ClientType.CAS_PROTOCOL, ClientType.OAUTH_PROTOCOL,
+            ClientType.OPENID_PROTOCOL, ClientType.SAML_PROTOCOL, ClientType.OPENID_CONNECT_PROTOCOL);
 
     /**
      * The logger.
@@ -95,30 +81,31 @@ public final class ClientAction extends AbstractAction {
      * The clients used for authentication.
      */
     @NotNull
-    private final Clients clients;
+    @Autowired
+    @Qualifier("builtClients")
+    private Clients clients;
+
+    @NotNull
+    @Autowired(required=false)
+    @Qualifier("defaultAuthenticationSystemSupport")
+    private AuthenticationSystemSupport authenticationSystemSupport = new DefaultAuthenticationSystemSupport();
 
     /**
      * The service for CAS authentication.
      */
     @NotNull
-    private final CentralAuthenticationService centralAuthenticationService;
+    @Autowired
+    private CentralAuthenticationService centralAuthenticationService;
 
-    /**
-     * Build the action.
-     *
-     * @param theCentralAuthenticationService The service for CAS authentication
-     * @param theClients The clients for authentication
-     */
-    public ClientAction(final CentralAuthenticationService theCentralAuthenticationService,
-            final Clients theClients) {
-        this.centralAuthenticationService = theCentralAuthenticationService;
-        this.clients = theClients;
+    static {
         ProfileHelper.setKeepRawData(true);
     }
 
     /**
-     * {@inheritDoc}
+     * Build the ClientAction.
      */
+    public ClientAction() {}
+
     @Override
     protected Event doExecute(final RequestContext context) throws Exception {
         final HttpServletRequest request = WebUtils.getHttpServletRequest(context);
@@ -141,8 +128,8 @@ public final class ClientAction extends AbstractAction {
             logger.debug("client: {}", client);
 
             // Only supported protocols
-            final Mechanism mechanism = client.getMechanism();
-            if (!SUPPORTED_PROTOCOLS.contains(mechanism)) {
+            final ClientType clientType = client.getClientType();
+            if (!SUPPORTED_PROTOCOLS.contains(clientType)) {
                 throw new TechnicalException("Only CAS, OAuth, OpenID and SAML protocols are supported: " + client);
             }
 
@@ -160,23 +147,28 @@ public final class ClientAction extends AbstractAction {
             }
 
             // retrieve parameters from web session
-            final Service service = (Service) session.getAttribute(SERVICE);
-            context.getFlowScope().put(SERVICE, service);
+            final Service service = (Service) session.getAttribute(CasProtocolConstants.PARAMETER_SERVICE);
+            context.getFlowScope().put(CasProtocolConstants.PARAMETER_SERVICE, service);
             logger.debug("retrieve service: {}", service);
             if (service != null) {
-                request.setAttribute(SERVICE, service.getId());
+                request.setAttribute(CasProtocolConstants.PARAMETER_SERVICE, service.getId());
             }
-            restoreRequestAttribute(request, session, THEME);
-            restoreRequestAttribute(request, session, LOCALE);
-            restoreRequestAttribute(request, session, METHOD);
+            restoreRequestAttribute(request, session, ThemeChangeInterceptor.DEFAULT_PARAM_NAME);
+            restoreRequestAttribute(request, session, LocaleChangeInterceptor.DEFAULT_PARAM_NAME);
+            restoreRequestAttribute(request, session, CasProtocolConstants.PARAMETER_METHOD);
 
             // credentials not null -> try to authenticate
             if (credentials != null) {
-                final TicketGrantingTicket tgt = 
-                        this.centralAuthenticationService.createTicketGrantingTicket(new ClientCredential(credentials));
+                final AuthenticationContextBuilder builder = new DefaultAuthenticationContextBuilder(
+                        this.authenticationSystemSupport.getPrincipalElectionStrategy());
+                final AuthenticationTransaction transaction = AuthenticationTransaction.wrap(new ClientCredential(credentials));
+                this.authenticationSystemSupport.getAuthenticationTransactionManager().handle(transaction,  builder);
+                final AuthenticationContext authenticationContext = builder.build(service);
+                final TicketGrantingTicket tgt = this.centralAuthenticationService.createTicketGrantingTicket(authenticationContext);
                 WebUtils.putTicketGrantingTicketInScopes(context, tgt);
                 return success();
             }
+
         }
 
         // no or aborted authentication : go to login page
@@ -200,19 +192,22 @@ public final class ClientAction extends AbstractAction {
         // save parameters in web session
         final WebApplicationService service = WebUtils.getService(context);
         logger.debug("save service: {}", service);
-        session.setAttribute(SERVICE, service);
-        saveRequestParameter(request, session, THEME);
-        saveRequestParameter(request, session, LOCALE);
-        saveRequestParameter(request, session, METHOD);
+        session.setAttribute(CasProtocolConstants.PARAMETER_SERVICE, service);
+        saveRequestParameter(request, session, ThemeChangeInterceptor.DEFAULT_PARAM_NAME);
+        saveRequestParameter(request, session, LocaleChangeInterceptor.DEFAULT_PARAM_NAME);
+        saveRequestParameter(request, session, CasProtocolConstants.PARAMETER_METHOD);
 
+        final LinkedHashMap<String, String> urls = new LinkedHashMap<>();
         // for all clients, generate redirection urls
         for (final Client client : this.clients.findAllClients()) {
-            final String key = client.getName() + "Url";
-            final BaseClient baseClient = (BaseClient) client;
-            final String redirectionUrl = baseClient.getRedirectionUrl(webContext);
-            logger.debug("{} -> {}", key, redirectionUrl);
-            context.getFlowScope().put(key, redirectionUrl);
+            final IndirectClient indirectClient = (IndirectClient) client;
+            // clean Client suffix for default names
+            final String name = client.getName().replace("Client", "");
+            final String redirectionUrl = indirectClient.getRedirectionUrl(webContext);
+            logger.debug("{} -> {}", name, redirectionUrl);
+            urls.put(name, redirectionUrl);
         }
+        context.getFlowScope().put(PAC4J_URLS, urls);
     }
 
     /**
@@ -241,5 +236,25 @@ public final class ClientAction extends AbstractAction {
         if (value != null) {
             session.setAttribute(name, value);
         }
+    }
+
+    public Clients getClients() {
+        return clients;
+    }
+
+    public void setClients(final Clients clients) {
+        this.clients = clients;
+    }
+
+    public CentralAuthenticationService getCentralAuthenticationService() {
+        return centralAuthenticationService;
+    }
+
+    public void setCentralAuthenticationService(final CentralAuthenticationService centralAuthenticationService) {
+        this.centralAuthenticationService = centralAuthenticationService;
+    }
+
+    public AuthenticationSystemSupport getAuthenticationSystemSupport() {
+        return authenticationSystemSupport;
     }
 }

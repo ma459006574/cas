@@ -1,30 +1,14 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
 package org.jasig.cas;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.support.WebApplicationContextUtils;
 
 import javax.annotation.PostConstruct;
+import javax.servlet.ServletContext;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 import java.util.Formatter;
@@ -38,11 +22,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author Misagh Moayyed
  * @since 4.1
  */
-@Component
+@Component("casEnvironmentContextListener")
 public final class CasEnvironmentContextListener implements ServletContextListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(CasEnvironmentContextListener.class);
 
-    private static AtomicBoolean INITIALIZED = new AtomicBoolean(false);
+    private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
 
     /**
      * Instantiates a new Cas environment context listener.
@@ -75,17 +59,19 @@ public final class CasEnvironmentContextListener implements ServletContextListen
      */
     private String collectEnvironmentInfo() {
         final Properties properties = System.getProperties();
-        final Formatter formatter = new Formatter();
-        formatter.format("\n******************** Welcome to CAS ********************\n");
-        formatter.format("CAS Version: %s\n", CasVersion.getVersion());
-        formatter.format("Java Home: %s\n", properties.get("java.home"));
-        formatter.format("Java Vendor: %s\n", properties.get("java.vendor"));
-        formatter.format("Java Version: %s\n", properties.get("java.version"));
-        formatter.format("OS Architecture: %s\n", properties.get("os.arch"));
-        formatter.format("OS Name: %s\n", properties.get("os.name"));
-        formatter.format("OS Version: %s\n", properties.get("os.version"));
-        formatter.format("*******************************************************\n");
-        return formatter.toString();
+        try (final Formatter formatter = new Formatter()) {
+            formatter.format("\n******************** Welcome to CAS *******************\n");
+            formatter.format("CAS Version: %s\n", CasVersion.getVersion());
+            formatter.format("Build Date/Time: %s\n", CasVersion.getDateTime());
+            formatter.format("Java Home: %s\n", properties.get("java.home"));
+            formatter.format("Java Vendor: %s\n", properties.get("java.vendor"));
+            formatter.format("Java Version: %s\n", properties.get("java.version"));
+            formatter.format("OS Architecture: %s\n", properties.get("os.arch"));
+            formatter.format("OS Name: %s\n", properties.get("os.name"));
+            formatter.format("OS Version: %s\n", properties.get("os.version"));
+            formatter.format("*******************************************************\n");
+            return formatter.toString();
+        }
     }
 
     @Override
@@ -97,8 +83,12 @@ public final class CasEnvironmentContextListener implements ServletContextListen
 
     @Override
     public void contextInitialized(final ServletContextEvent event) {
-        LOGGER.info("[{}] has loaded the CAS application context",
-                event.getServletContext().getServerInfo());
+        final ServletContext servletContext = event.getServletContext();
+        final ApplicationContext ctx =
+            WebApplicationContextUtils.getWebApplicationContext(servletContext);
+
+        LOGGER.info("[{}] has loaded the CAS servlet application context: {}",
+            servletContext.getServerInfo(), ctx);
     }
 
     @Override

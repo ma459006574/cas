@@ -1,30 +1,16 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.support.openid.web.mvc;
 
 import org.apache.commons.lang3.StringUtils;
-import org.jasig.cas.web.DelegateController;
+import org.jasig.cas.support.openid.OpenIdProtocolConstants;
+import org.jasig.cas.web.AbstractDelegateController;
 import org.openid4java.message.Message;
 import org.openid4java.message.ParameterList;
 import org.openid4java.server.ServerManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.ModelAndView;
 
 import javax.servlet.http.HttpServletRequest;
@@ -39,7 +25,8 @@ import java.util.Map;
  * @author Frederic Esnault
  * @since 3.5
  */
-public class SmartOpenIdController extends DelegateController implements Serializable {
+@Component("smartOpenIdAssociationController")
+public class SmartOpenIdController extends AbstractDelegateController implements Serializable {
 
     private static final long serialVersionUID = -594058549445950430L;
 
@@ -49,10 +36,10 @@ public class SmartOpenIdController extends DelegateController implements Seriali
     /** View if association Succeeds. */
     private static final String DEFAULT_ASSOCIATION_SUCCESS_VIEW_NAME = "casOpenIdAssociationSuccessView";
 
-    private static final String ASSOCIATE = "associate";
-
     private final Logger logger = LoggerFactory.getLogger(SmartOpenIdController.class);
 
+    @Autowired
+    @Qualifier("serverManager")
     private ServerManager serverManager;
 
     /** The view to redirect to on a successful validation. */
@@ -75,13 +62,13 @@ public class SmartOpenIdController extends DelegateController implements Seriali
     public Map<String, String> getAssociationResponse(final HttpServletRequest request) {
         final ParameterList parameters = new ParameterList(request.getParameterMap());
 
-        final String mode = parameters.hasParameter("openid.mode")
-                ? parameters.getParameterValue("openid.mode")
+        final String mode = parameters.hasParameter(OpenIdProtocolConstants.OPENID_MODE)
+                ? parameters.getParameterValue(OpenIdProtocolConstants.OPENID_MODE)
                 : null;
 
         Message response = null;
 
-        if (StringUtils.equals(mode, ASSOCIATE)) {
+        if (StringUtils.equals(mode, OpenIdProtocolConstants.ASSOCIATE)) {
             response = serverManager.associationResponse(parameters);
         }
         final Map<String, String> responseParams = new HashMap<>();
@@ -103,8 +90,8 @@ public class SmartOpenIdController extends DelegateController implements Seriali
 
     @Override
     public boolean canHandle(final HttpServletRequest request, final HttpServletResponse response) {
-        final String openIdMode = request.getParameter("openid.mode");
-        if (StringUtils.equals(openIdMode, ASSOCIATE)) {
+        final String openIdMode = request.getParameter(OpenIdProtocolConstants.OPENID_MODE);
+        if (StringUtils.equals(openIdMode, OpenIdProtocolConstants.ASSOCIATE)) {
             logger.info("Handling request. openid.mode : {}", openIdMode);
             return true;
         }
@@ -120,8 +107,7 @@ public class SmartOpenIdController extends DelegateController implements Seriali
         this.failureView = failureView;
     }
 
-    @NotNull
-    public void setServerManager(final ServerManager serverManager) {
+    public void setServerManager(@NotNull final ServerManager serverManager) {
         this.serverManager = serverManager;
     }
 }

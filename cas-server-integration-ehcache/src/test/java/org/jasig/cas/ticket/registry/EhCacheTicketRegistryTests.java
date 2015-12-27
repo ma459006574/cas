@@ -1,30 +1,7 @@
-/*
- * Licensed to Apereo under one or more contributor license
- * agreements. See the NOTICE file distributed with this work
- * for additional information regarding copyright ownership.
- * Apereo licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License.  You may obtain a
- * copy of the License at the following location:
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 package org.jasig.cas.ticket.registry;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-
-import org.jasig.cas.TestUtils;
+import org.jasig.cas.authentication.TestUtils;
 import org.jasig.cas.authentication.principal.Service;
-import org.jasig.cas.authentication.principal.SimpleWebApplicationServiceImpl;
 import org.jasig.cas.ticket.ServiceTicket;
 import org.jasig.cas.ticket.Ticket;
 import org.jasig.cas.ticket.TicketGrantingTicket;
@@ -35,12 +12,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
-import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
 
 import static org.junit.Assert.*;
 
@@ -52,25 +31,21 @@ import static org.junit.Assert.*;
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations = "classpath:ticketRegistry.xml")
-public final class EhCacheTicketRegistryTests implements ApplicationContextAware {
+public final class EhCacheTicketRegistryTests {
 
     private static final int TICKETS_IN_REGISTRY = 10;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
+    @Autowired
     private ApplicationContext applicationContext;
+
     private TicketRegistry ticketRegistry;
 
     @Before
     public void setUp() throws Exception {
         this.ticketRegistry = this.applicationContext.getBean("ticketRegistry", TicketRegistry.class);
         initTicketRegistry();
-    }
-
-    public static Service getService() {
-        final MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addParameter("service", "test");
-        return SimpleWebApplicationServiceImpl.createServiceFrom(request);
     }
 
     /**
@@ -218,8 +193,9 @@ public final class EhCacheTicketRegistryTests implements ApplicationContextAware
         for (int i = 0; i < TICKETS_IN_REGISTRY; i++) {
             final TicketGrantingTicket ticketGrantingTicket = new TicketGrantingTicketImpl("TEST" + i,
                     TestUtils.getAuthentication(), new NeverExpiresExpirationPolicy());
-            final ServiceTicket st = ticketGrantingTicket.grantServiceTicket("tests" + i, getService(),
-                    new NeverExpiresExpirationPolicy(), false);
+            final ServiceTicket st = ticketGrantingTicket.grantServiceTicket("tests" + i,
+                    org.jasig.cas.services.TestUtils.getService(),
+                    new NeverExpiresExpirationPolicy(), false, true);
             tickets.add(ticketGrantingTicket);
             tickets.add(st);
             this.ticketRegistry.addTicket(ticketGrantingTicket);
@@ -242,10 +218,39 @@ public final class EhCacheTicketRegistryTests implements ApplicationContextAware
         }
     }
 
-    @Override
-    public void setApplicationContext(final ApplicationContext applicationContext) {
-        this.applicationContext = applicationContext;
+    @Test
+    public void verifyDeleteTicketWithChildren() {
+        this.ticketRegistry.addTicket(new TicketGrantingTicketImpl(
+                "TGT", TestUtils.getAuthentication(), new NeverExpiresExpirationPolicy()));
+        final TicketGrantingTicket tgt = this.ticketRegistry.getTicket(
+                "TGT", TicketGrantingTicket.class);
+
+        final Service service = org.jasig.cas.services.TestUtils.getService("TGT_DELETE_TEST");
+
+        final ServiceTicket st1 = tgt.grantServiceTicket(
+                "ST1", service, new NeverExpiresExpirationPolicy(), true, false);
+        final ServiceTicket st2 = tgt.grantServiceTicket(
+                "ST2", service, new NeverExpiresExpirationPolicy(), true, false);
+        final ServiceTicket st3 = tgt.grantServiceTicket(
+                "ST3", service, new NeverExpiresExpirationPolicy(), true, false);
+
+        this.ticketRegistry.addTicket(st1);
+        this.ticketRegistry.addTicket(st2);
+        this.ticketRegistry.addTicket(st3);
+
+        assertNotNull(this.ticketRegistry.getTicket("TGT", TicketGrantingTicket.class));
+        assertNotNull(this.ticketRegistry.getTicket("ST1", ServiceTicket.class));
+        assertNotNull(this.ticketRegistry.getTicket("ST2", ServiceTicket.class));
+        assertNotNull(this.ticketRegistry.getTicket("ST3", ServiceTicket.class));
+
+        this.ticketRegistry.deleteTicket(tgt.getId());
+
+        assertNull(this.ticketRegistry.getTicket("TGT", TicketGrantingTicket.class));
+        assertNull(this.ticketRegistry.getTicket("ST1", ServiceTicket.class));
+        assertNull(this.ticketRegistry.getTicket("ST2", ServiceTicket.class));
+        assertNull(this.ticketRegistry.getTicket("ST3", ServiceTicket.class));
     }
+
 
     /**
      * Cleaning ticket registry to start afresh, after newing up the instance.
